@@ -1,0 +1,640 @@
+#!/usr/bin/env bash
+
+# Anthropic Configuration Manager
+# Helps customize Claude Code configuration
+#
+# Author: Arif Ariyan
+# Websites: https://beetlix.com | https://riffcompiler.com
+
+SCRIPT_VERSION="1.0.0"
+
+# Color codes for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+MAGENTA='\033[0;35m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
+
+# Global variables
+CONFIG_SCOPE=""
+MODEL_PROVIDER=""
+FILE_CONFIG=""
+BACKUP_FILE=""
+
+# ============================================================================
+# Foundational Functions
+# ============================================================================
+
+# Check if jq is installed
+check_jq_dependency() {
+    if ! command -v jq &> /dev/null; then
+        echo -e "${RED}Error: jq is required but not installed.${NC}"
+        echo "Please install jq: brew install jq (macOS) or apt-get install jq (Linux)"
+        exit 1
+    fi
+}
+
+# Detect and load existing settings.json
+load_settings() {
+    local config_file="$1"
+    
+    if [[ -f "$config_file" ]]; then
+        if jq empty "$config_file" 2>/dev/null; then
+            echo -e "${GREEN}Loaded existing configuration from $config_file${NC}"
+            return 0
+        else
+            echo -e "${YELLOW}Warning: Existing config file is not valid JSON${NC}"
+            return 1
+        fi
+    fi
+    
+    return 2
+}
+
+# Save settings to JSON file
+save_settings() {
+    local config_file="$1"
+    local auth_token="$2"
+    local base_url="$3"
+    local sonnet_model="$4"
+    local opus_model="$5"
+    local haiku_model="$6"
+    
+    local dir
+    dir=$(dirname "$config_file")
+    if [[ ! -d "$dir" ]]; then
+        mkdir -p "$dir" || {
+            echo -e "${RED}Error: Cannot create directory $dir${NC}"
+            exit 1
+        }
+    fi
+    
+    local json
+    
+    if [[ -f "$config_file" ]]; then
+        # File exists - merge with existing values while updating only env
+        if jq empty "$config_file" 2>/dev/null; then
+            # Use fromjson to parse the existing file content
+            json=$(jq -n \
+                --arg token "$auth_token" \
+                --arg base "$base_url" \
+                --arg sonnet "$sonnet_model" \
+                --arg opus "$opus_model" \
+                --arg haiku "$haiku_model" \
+                --arg existing "$(cat "$config_file")" \
+                '($existing | fromjson) | .env = {
+                    "ANTHROPIC_AUTH_TOKEN": $token,
+                    "ANTHROPIC_BASE_URL": $base,
+                    "ANTHROPIC_API_KEY": "",
+                    "ANTHROPIC_DEFAULT_SONNET_MODEL": $sonnet,
+                    "ANTHROPIC_DEFAULT_OPUS_MODEL": $opus,
+                    "ANTHROPIC_DEFAULT_HAIKU_MODEL": $haiku
+                }')
+        else
+            # Invalid JSON, create new
+            json=$(jq -n \
+                --arg token "$auth_token" \
+                --arg base "$base_url" \
+                --arg sonnet "$sonnet_model" \
+                --arg opus "$opus_model" \
+                --arg haiku "$haiku_model" \
+                '{
+                    "env": {
+                        "ANTHROPIC_AUTH_TOKEN": $token,
+                        "ANTHROPIC_BASE_URL": $base,
+                        "ANTHROPIC_API_KEY": "",
+                        "ANTHROPIC_DEFAULT_SONNET_MODEL": $sonnet,
+                        "ANTHROPIC_DEFAULT_OPUS_MODEL": $opus,
+                        "ANTHROPIC_DEFAULT_HAIKU_MODEL": $haiku
+                    }
+                }')
+        fi
+    else
+        # File doesn't exist - create new
+        json=$(jq -n \
+            --arg token "$auth_token" \
+            --arg base "$base_url" \
+            --arg sonnet "$sonnet_model" \
+            --arg opus "$opus_model" \
+            --arg haiku "$haiku_model" \
+            '{
+                "env": {
+                    "ANTHROPIC_AUTH_TOKEN": $token,
+                    "ANTHROPIC_BASE_URL": $base,
+                    "ANTHROPIC_API_KEY": "",
+                    "ANTHROPIC_DEFAULT_SONNET_MODEL": $sonnet,
+                    "ANTHROPIC_DEFAULT_OPUS_MODEL": $opus,
+                    "ANTHROPIC_DEFAULT_HAIKU_MODEL": $haiku
+                }
+            }')
+    fi
+    
+    # Validate JSON before writing
+    if echo "$json" | jq empty 2>/dev/null; then
+        echo "$json" > "$config_file"
+        echo -e "${GREEN}Configuration saved to $config_file${NC}"
+    else
+        echo -e "${RED}Error: Generated invalid JSON${NC}"
+        exit 1
+    fi
+}
+
+# Backup existing settings.json
+backup_settings() {
+    local config_file="$1"
+    
+    if [[ -f "$config_file" ]]; then
+        local timestamp
+        timestamp=$(date +%Y%m%d_%H%M%S)
+        BACKUP_FILE="${config_file}.backup.${timestamp}"
+        
+        cp "$config_file" "$BACKUP_FILE"
+        echo -e "${YELLOW}Backed up existing config to $BACKUP_FILE${NC}"
+    fi
+}
+
+# ============================================================================
+# Scope Selection
+# ============================================================================
+
+get_global_config_path() {
+    echo "$HOME/.claude/settings.json"
+}
+
+get_project_config_path() {
+    echo "$(pwd)/.claude/settings.json"
+}
+
+validate_writable() {
+    local config_file="$1"
+    local dir
+    dir=$(dirname "$config_file")
+    
+    if [[ ! -d "$dir" ]]; then
+        if ! mkdir -p "$dir"; then
+            echo -e "${RED}Error: Cannot create directory $dir${NC}"
+            return 1
+        fi
+        echo "Created directory: $dir"
+    fi
+    
+    if [[ -f "$config_file" ]] && [[ ! -w "$config_file" ]]; then
+        echo -e "${RED}Error: File $config_file is not writable${NC}"
+        return 1
+    fi
+    
+    if [[ ! -f "$config_file" ]]; then
+        # Check if directory is writable by testing directory permissions
+        if [[ ! -w "$dir" ]]; then
+            echo -e "${RED}Error: Directory $dir is not writable${NC}"
+            return 1
+        fi
+    fi
+    
+    return 0
+}
+
+prompt_scope_selection() {
+    while true; do
+        echo -e "${BLUE}Select configuration scope:${NC}"
+        echo -e "  ${CYAN}1)${NC} Global   - ~/.claude/settings.json"
+        echo -e "  ${CYAN}2)${NC} Project  - .claude/settings.json (in current directory)"
+        echo ""
+        
+        local choice
+        echo -n "Enter your choice (1 or 2): "
+        read choice
+        
+        case "$choice" in
+            1)
+                CONFIG_SCOPE="global"
+                FILE_CONFIG=$(get_global_config_path)
+                echo -e "${GREEN}✓ Selected: Global configuration${NC}"
+                return 0
+                ;;
+            2)
+                CONFIG_SCOPE="project"
+                FILE_CONFIG=$(get_project_config_path)
+                echo -e "${GREEN}✓ Selected: Project configuration${NC}"
+                return 0
+                ;;
+            *)
+                echo -e "${RED}Invalid choice. Please enter 1 or 2.${NC}"
+                ;;
+        esac
+    done
+}
+
+# ============================================================================
+# Provider Selection
+# ============================================================================
+
+get_provider_base_url() {
+    local provider="$1"
+    
+    case "$provider" in
+        openrouter)
+            echo "https://openrouter.ai/api"
+            ;;
+        ollama)
+            echo "http://localhost:11434"
+            ;;
+        custom)
+            echo ""
+            ;;
+        *)
+            echo ""
+            ;;
+    esac
+}
+
+prompt_provider_selection() {
+    while true; do
+        echo ""
+        echo -e "${BLUE}Select AI model provider:${NC}"
+        echo -e "  ${CYAN}1)${NC} OpenRouter  - Uses OpenRouter API (base URL prefilled)"
+        echo -e "  ${CYAN}2)${NC} Ollama      - Local Ollama server (default base URL prefilled)"
+        echo -e "  ${CYAN}3)${NC} Custom      - Enter your own base URL"
+        echo ""
+        
+        local choice
+        echo -n "Enter your choice (1, 2, or 3): "
+        read choice
+        
+        case "$choice" in
+            1)
+                MODEL_PROVIDER="openrouter"
+                echo -e "${GREEN}✓ Selected: OpenRouter${NC}"
+                return 0
+                ;;
+            2)
+                MODEL_PROVIDER="ollama"
+                echo -e "${GREEN}✓ Selected: Ollama${NC}"
+                return 0
+                ;;
+            3)
+                MODEL_PROVIDER="custom"
+                echo -e "${GREEN}✓ Selected: Custom${NC}"
+                return 0
+                ;;
+            *)
+                echo -e "${RED}Invalid choice. Please enter 1, 2, or 3.${NC}"
+                ;;
+        esac
+    done
+}
+
+# ============================================================================
+# Configure Environment Variables
+# ============================================================================
+
+AUTH_TOKEN=""
+BASE_URL=""
+SONNET_MODEL=""
+OPUS_MODEL=""
+HAIKU_MODEL=""
+
+read_existing_values() {
+    local config_file="$1"
+    
+    if [[ -f "$config_file" ]] && jq empty "$config_file" 2>/dev/null; then
+        AUTH_TOKEN=$(jq -r '.env.ANTHROPIC_AUTH_TOKEN // ""' "$config_file")
+        BASE_URL=$(jq -r '.env.ANTHROPIC_BASE_URL // ""' "$config_file")
+        SONNET_MODEL=$(jq -r '.env.ANTHROPIC_DEFAULT_SONNET_MODEL // ""' "$config_file")
+        OPUS_MODEL=$(jq -r '.env.ANTHROPIC_DEFAULT_OPUS_MODEL // ""' "$config_file")
+        HAIKU_MODEL=$(jq -r '.env.ANTHROPIC_DEFAULT_HAIKU_MODEL // ""' "$config_file")
+    fi
+}
+
+prompt_auth_token() {
+    local retry_count=0
+    local max_retries=3
+    
+    while [[ $retry_count -lt $max_retries ]]; do
+        echo ""
+        echo -e "${MAGENTA}ANTHROPIC_AUTH_TOKEN:${NC}"
+        if [[ -n "$AUTH_TOKEN" ]]; then
+            echo -e "  Current: ${YELLOW}[masked]${NC}"
+            echo -n "  New value (press Enter to keep current): "
+            
+            # Use stty to disable echo, read, then re-enable (with error handling)
+            if stty -echo 2>/dev/null; then
+                local new_token
+                read new_token
+                local read_status=$?
+                stty echo 2>/dev/null
+                
+                if [[ $read_status -eq 0 ]] && [[ -n "$new_token" ]]; then
+                    AUTH_TOKEN="$new_token"
+                fi
+            else
+                echo -e "${YELLOW}Warning: Could not disable echo. Input will be visible.${NC}"
+                read new_token
+                if [[ -n "$new_token" ]]; then
+                    AUTH_TOKEN="$new_token"
+                fi
+            fi
+        else
+            echo -n "Enter API token: "
+            if stty -echo 2>/dev/null; then
+                read AUTH_TOKEN
+                local read_status=$?
+                stty echo 2>/dev/null
+            else
+                echo -e "${YELLOW}Warning: Could not disable echo. Input will be visible.${NC}"
+                read AUTH_TOKEN
+            fi
+        fi
+        echo ""
+        
+        if [[ -n "$AUTH_TOKEN" ]]; then
+            return 0
+        fi
+        
+        retry_count=$((retry_count + 1))
+        echo -e "${RED}Error: Auth token cannot be empty (attempt $retry_count/$max_retries)${NC}"
+    done
+    
+    echo -e "${RED}Error: Too many failed attempts. Exiting.${NC}"
+    exit 1
+}
+
+prompt_base_url() {
+    # For OpenRouter, it's static - no need to ask
+    if [[ "$MODEL_PROVIDER" == "openrouter" ]]; then
+        BASE_URL=$(get_provider_base_url "$MODEL_PROVIDER")
+        echo ""
+        echo -e "${MAGENTA}ANTHROPIC_BASE_URL:${NC} ${GREEN}$BASE_URL${NC} ${CYAN}(static for OpenRouter)${NC}"
+        return 0
+    fi
+    
+    # For Ollama, allow editing since users can have different IP/port
+    if [[ "$MODEL_PROVIDER" == "ollama" ]]; then
+        local default_base_url
+        default_base_url=$(get_provider_base_url "$MODEL_PROVIDER")
+        echo ""
+        echo -e "${MAGENTA}ANTHROPIC_BASE_URL:${NC}"
+        echo -e "  Default: ${YELLOW}$default_base_url${NC}"
+        echo -n "  New value (press Enter to keep default): "
+        local new_url
+        read new_url
+        if [[ -n "$new_url" ]]; then
+            BASE_URL="$new_url"
+        else
+            BASE_URL="$default_base_url"
+        fi
+        return 0
+    fi
+    
+    # For custom provider, always ask - use loop for validation
+    while true; do
+        echo ""
+        echo -e "${MAGENTA}ANTHROPIC_BASE_URL:${NC}"
+        if [[ -n "$BASE_URL" ]]; then
+            echo -e "  Current: ${YELLOW}$BASE_URL${NC}"
+            echo -n "  New value (press Enter to keep current): "
+            read new_url
+            if [[ -n "$new_url" ]]; then
+                BASE_URL="$new_url"
+            fi
+        else
+            echo -n "Enter base URL: "
+            read BASE_URL
+        fi
+
+        # Validate URL format
+        if [[ -n "$BASE_URL" ]] && [[ ! "$BASE_URL" =~ ^https?:// ]]; then
+            echo -e "${RED}Error: Base URL must start with http:// or https://${NC}"
+            BASE_URL=""
+        fi
+
+        if [[ -n "$BASE_URL" ]]; then
+            return 0
+        fi
+
+        echo -e "${RED}Error: Base URL cannot be empty${NC}"
+    done
+}
+
+prompt_all_models() {
+    echo ""
+    echo -e "${BLUE}=== Model Configuration ===${NC}"
+    
+    # SONNET_MODEL
+    echo ""
+    echo -e "${MAGENTA}ANTHROPIC_DEFAULT_SONNET_MODEL:${NC}"
+    if [[ -n "$SONNET_MODEL" ]]; then
+        echo -e "  Current: ${YELLOW}$SONNET_MODEL${NC}"
+        echo -n "Enter default Sonnet model (press Enter to keep current): "
+    else
+        echo -n "Enter default Sonnet model: "
+    fi
+    read SONNET_MODEL_INPUT
+    if [[ -n "$SONNET_MODEL_INPUT" ]]; then
+        SONNET_MODEL="$SONNET_MODEL_INPUT"
+    fi
+    
+    # OPUS_MODEL
+    echo ""
+    echo -e "${MAGENTA}ANTHROPIC_DEFAULT_OPUS_MODEL:${NC}"
+    if [[ -n "$OPUS_MODEL" ]]; then
+        echo -e "  Current: ${YELLOW}$OPUS_MODEL${NC}"
+        echo -n "Enter default Opus model (press Enter to keep current): "
+    else
+        echo -n "Enter default Opus model: "
+    fi
+    read OPUS_MODEL_INPUT
+    if [[ -n "$OPUS_MODEL_INPUT" ]]; then
+        OPUS_MODEL="$OPUS_MODEL_INPUT"
+    fi
+    
+    # HAIKU_MODEL
+    echo ""
+    echo -e "${MAGENTA}ANTHROPIC_DEFAULT_HAIKU_MODEL:${NC}"
+    if [[ -n "$HAIKU_MODEL" ]]; then
+        echo -e "  Current: ${YELLOW}$HAIKU_MODEL${NC}"
+        echo -n "Enter default Haiku model (press Enter to keep current): "
+    else
+        echo -n "Enter default Haiku model: "
+    fi
+    read HAIKU_MODEL_INPUT
+    if [[ -n "$HAIKU_MODEL_INPUT" ]]; then
+        HAIKU_MODEL="$HAIKU_MODEL_INPUT"
+    fi
+}
+
+# ============================================================================
+# View Current Configuration
+# ============================================================================
+
+display_current_config() {
+    local config_file="$1"
+    local quiet="${2:-false}"
+    
+    if [[ ! -f "$config_file" ]]; then
+        if [[ "$quiet" != "true" ]]; then
+            echo ""
+            echo "=== Current Configuration ==="
+            echo -e "${YELLOW}No existing configuration found.${NC}"
+        fi
+        return 1
+    fi
+    
+    echo ""
+    echo "=== Current Configuration ==="
+    
+    if ! jq empty "$config_file" 2>/dev/null; then
+        echo -e "${YELLOW}Existing configuration is not valid JSON.${NC}"
+        return 1
+    fi
+    
+    local token
+    token=$(jq -r '.env.ANTHROPIC_AUTH_TOKEN // "(not set)"' "$config_file")
+    if [[ "$token" != "(not set)" ]]; then
+        token="[masked]"
+    fi
+    
+    echo "  ANTHROPIC_AUTH_TOKEN: $token"
+    echo "  ANTHROPIC_BASE_URL: $(jq -r '.env.ANTHROPIC_BASE_URL // "(not set)"' "$config_file")"
+    echo "  ANTHROPIC_DEFAULT_SONNET_MODEL: $(jq -r '.env.ANTHROPIC_DEFAULT_SONNET_MODEL // "(not set)"' "$config_file")"
+    echo "  ANTHROPIC_DEFAULT_OPUS_MODEL: $(jq -r '.env.ANTHROPIC_DEFAULT_OPUS_MODEL // "(not set)"' "$config_file")"
+    echo "  ANTHROPIC_DEFAULT_HAIKU_MODEL: $(jq -r '.env.ANTHROPIC_DEFAULT_HAIKU_MODEL // "(not set)"' "$config_file")"
+    
+    return 0
+}
+
+prompt_create_config() {
+    local config_file="$1"
+    
+    if [[ -f "$config_file" ]]; then
+        return 0
+    fi
+    
+    echo ""
+    echo -e "${YELLOW}No configuration file exists at:${NC}"
+    echo "  $config_file"
+    echo ""
+    echo -n "Do you want to create a new configuration? (y/n): "
+    read confirm
+    
+    case "$confirm" in
+        y|Y|"")
+            return 0
+            ;;
+        n|N)
+            echo "Aborted. No changes made."
+            exit 0
+            ;;
+        *)
+            echo -e "${RED}Invalid choice. Please enter y or n.${NC}"
+            prompt_create_config "$config_file"
+            ;;
+    esac
+}
+
+# ============================================================================
+# Help, Cleanup, Signal Handling
+# ============================================================================
+
+show_help() {
+    echo -e "${CYAN}Claude Custom v${SCRIPT_VERSION}${NC}"
+    echo ""
+    echo "An interactive Bash CLI tool that configures Claude Code's settings.json"
+    echo "with your preferred AI model provider."
+    echo ""
+    echo -e "${BLUE}Usage:${NC}"
+    echo "  claude-custom [OPTIONS]"
+    echo ""
+    echo -e "${BLUE}Options:${NC}"
+    echo "  -h, --help     Show this help message"
+    echo "  -v, --version  Show version information"
+    echo ""
+    echo -e "${BLUE}Author:${NC}"
+    echo "  Arif Ariyan"
+    echo "  https://beetlix.com"
+    echo "  https://riffcompiler.com"
+    echo ""
+    echo -e "${YELLOW}For more info:${NC} https://github.com/obiwancenobi/claude-custom"
+}
+
+show_version() {
+    echo -e "${CYAN}Claude Custom v${SCRIPT_VERSION}${NC}"
+    echo ""
+    echo -e "${BLUE}Author:${NC}  Arif Ariyan"
+    echo -e "${BLUE}Web:${NC}      https://beetlix.com | https://riffcompiler.com"
+    echo -e "${BLUE}Repo:${NC}     https://github.com/obiwancenobi/claude-custom"
+}
+
+cleanup() {
+    restore_terminal
+    echo ""
+    echo -e "${YELLOW}Operation cancelled by user.${NC}"
+    exit 130
+}
+
+restore_terminal() {
+    stty echo 2>/dev/null
+}
+
+trap cleanup SIGINT SIGTERM
+trap restore_terminal EXIT
+
+# ============================================================================
+# Main Execution Flow
+# ============================================================================
+
+main() {
+    case "${1:-}" in
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        -v|--version)
+            show_version
+            exit 0
+            ;;
+    esac
+    
+    echo -e "${BLUE}Claude Custom v${SCRIPT_VERSION}${NC}"
+    echo ""
+    
+    check_jq_dependency
+    
+    prompt_scope_selection
+    
+    # Validate the config file is writable before proceeding
+    if ! validate_writable "$FILE_CONFIG"; then
+        echo -e "${RED}Error: Cannot proceed without writable configuration path${NC}"
+        exit 1
+    fi
+    
+    prompt_provider_selection
+    
+    prompt_create_config "$FILE_CONFIG"
+    
+    read_existing_values "$FILE_CONFIG"
+    
+    display_current_config "$FILE_CONFIG" "true"
+    
+    prompt_auth_token
+    prompt_base_url
+    prompt_all_models
+    
+    echo ""
+    echo -e "${BLUE}=== Saving Configuration ===${NC}"
+    
+    # Backup existing config before saving
+    backup_settings "$FILE_CONFIG"
+    
+    # Save the configuration
+    save_settings "$FILE_CONFIG" "$AUTH_TOKEN" "$BASE_URL" "$SONNET_MODEL" "$OPUS_MODEL" "$HAIKU_MODEL"
+    
+    echo ""
+    echo -e "${GREEN}✓ Configuration saved successfully!${NC}"
+    echo ""
+    echo -e "${YELLOW}Please restart Claude Code for changes to take effect.${NC}"
+}
+
+main "$@"
