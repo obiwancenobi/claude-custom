@@ -66,11 +66,15 @@ apk add jq
 
 ### Option 1: Homebrew (macOS/Linux) — Easiest
 
-```bash
-# Tap the repository (if available) or install directly
-brew install obiwancenobi/claude-custom/claude-custom
+Install the formula:
 
-# Or update and upgrade
+```bash
+brew install obiwancenobi/claude-custom/claude-custom
+```
+
+Update and upgrade:
+
+```bash
 brew update && brew upgrade claude-custom
 ```
 
@@ -78,11 +82,15 @@ brew update && brew upgrade claude-custom
 
 Download and install directly to `/usr/local/bin`:
 
-```bash
-# Using curl
-curl -sSL https://raw.githubusercontent.com/obiwancenobi/claude-custom/main/claude-custom | sudo tee /usr/local/bin/claude-custom > /dev/null && sudo chmod +x /usr/local/bin/claude-custom
+**Using curl:**
 
-# Using wget
+```bash
+curl -sSL https://raw.githubusercontent.com/obiwancenobi/claude-custom/main/claude-custom | sudo tee /usr/local/bin/claude-custom > /dev/null && sudo chmod +x /usr/local/bin/claude-custom
+```
+
+**Using wget:**
+
+```bash
 wget -qO- https://raw.githubusercontent.com/obiwancenobi/claude-custom/main/claude-custom | sudo tee /usr/local/bin/claude-custom > /dev/null && sudo chmod +x /usr/local/bin/claude-custom
 ```
 
