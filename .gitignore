@@ -1,0 +1,25 @@
+# Shell - but keep scripts in bin/
+!/bin/
+*.sh
+*.bash
+*.zsh
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+.claude/
+.kilocode/
+.opencode/
+.specify/
+specs/
+CLAUDE.md
