@@ -476,8 +476,8 @@ prompt_base_url() {
         echo -e "  Default: ${YELLOW}$default_base_url${NC}"
         
         if [[ "$GUM_AVAILABLE" == true ]]; then
-            local new_url
-            new_url=$(gum input --placeholder "Enter new value (leave empty to keep default)" --value "$default_base_url")
+            local placeholder_text="Enter new value (leave empty to keep default: $default_base_url)"
+            new_url=$(gum input --placeholder "$placeholder_text" --prompt.foreground "205" --cursor.foreground "205" --placeholder.background "235")
             if [[ -n "$new_url" ]]; then
                 BASE_URL="$new_url"
             else
@@ -503,8 +503,9 @@ prompt_base_url() {
             echo -e "  Current: ${YELLOW}$BASE_URL${NC}"
             
             if [[ "$GUM_AVAILABLE" == true ]]; then
+                local placeholder_text="Enter base URL (leave empty to keep current: $BASE_URL)"
                 local new_url
-                new_url=$(gum input --placeholder "Enter base URL (leave empty to keep current)" --value "$BASE_URL")
+                new_url=$(gum input --placeholder "$placeholder_text" --prompt.foreground "205" --cursor.foreground "205" --placeholder.background "235")
                 if [[ -n "$new_url" ]]; then
                     BASE_URL="$new_url"
                 fi
@@ -517,7 +518,7 @@ prompt_base_url() {
             fi
         else
             if [[ "$GUM_AVAILABLE" == true ]]; then
-                BASE_URL=$(gum input --placeholder "Enter base URL (https://...)")
+                BASE_URL=$(gum input --placeholder "Enter base URL (https://...)" --prompt.foreground "205" --cursor.foreground "205" --placeholder.background "235")
             else
                 echo -n "Enter base URL: "
                 read BASE_URL
@@ -542,7 +543,7 @@ prompt_all_models() {
     echo ""
     echo -e "${BLUE}=== Model Configuration ===${NC}"
     echo ""
-    echo -e "${YELLOW}⚠️  Note: Ensure your selected models support tool use/function calling.${NC}"
+    echo -e "${YELLOW}⚠️ Note: Ensure your selected models support tool use/function calling.${NC}"
     echo -e "${YELLOW}   Not all models support this capability - check your provider's documentation.${NC}"
     echo ""
     
@@ -552,11 +553,13 @@ prompt_all_models() {
     if [[ -n "$SONNET_MODEL" ]]; then
         echo -e "  Current: ${YELLOW}$SONNET_MODEL${NC}"
         if [[ "$GUM_AVAILABLE" == true ]]; then
-            SONNET_MODEL=$(gum input --placeholder "Enter default Sonnet model (empty to keep current)" --value "$SONNET_MODEL")
+            local placeholder_text="Enter default Sonnet model (current: $SONNET_MODEL)"
+            SONNET_MODEL=$(gum input --placeholder "$placeholder_text" --prompt.foreground "205" --cursor.foreground "205" --placeholder.background "235")
             # If user entered empty, keep original value
             if [[ -z "$SONNET_MODEL" ]]; then
                 SONNET_MODEL=$(jq -r '.env.ANTHROPIC_DEFAULT_SONNET_MODEL // ""' "$FILE_CONFIG")
             fi
+            echo -e "  ${GREEN}$SONNET_MODEL ${BLUE}will be set as the default Sonnet model.${NC}"
         else
             echo -n "Enter default Sonnet model (press Enter to keep current): "
             read SONNET_MODEL_INPUT
@@ -566,7 +569,8 @@ prompt_all_models() {
         fi
     else
         if [[ "$GUM_AVAILABLE" == true ]]; then
-            SONNET_MODEL=$(gum input --placeholder "Enter default Sonnet model")
+            SONNET_MODEL=$(gum input --placeholder "Enter default Sonnet model" --prompt.foreground "205" --cursor.foreground "205" --placeholder.background "235")
+            echo -e "  ${GREEN}$SONNET_MODEL ${BLUE}will be set as the default Sonnet model.${NC}"
         else
             echo -n "Enter default Sonnet model: "
             read SONNET_MODEL_INPUT
@@ -582,10 +586,12 @@ prompt_all_models() {
     if [[ -n "$OPUS_MODEL" ]]; then
         echo -e "  Current: ${YELLOW}$OPUS_MODEL${NC}"
         if [[ "$GUM_AVAILABLE" == true ]]; then
-            OPUS_MODEL=$(gum input --placeholder "Enter default Opus model (empty to keep current)" --value "$OPUS_MODEL")
+            local placeholder_text="Enter default Opus model (current: $OPUS_MODEL)"
+            OPUS_MODEL=$(gum input --placeholder "$placeholder_text" --prompt.foreground "205" --cursor.foreground "205" --placeholder.background "235")
             if [[ -z "$OPUS_MODEL" ]]; then
                 OPUS_MODEL=$(jq -r '.env.ANTHROPIC_DEFAULT_OPUS_MODEL // ""' "$FILE_CONFIG")
             fi
+            echo -e "  ${GREEN}$OPUS_MODEL ${BLUE}will be set as the default Opus model.${NC}"
         else
             echo -n "Enter default Opus model (press Enter to keep current): "
             read OPUS_MODEL_INPUT
@@ -595,7 +601,8 @@ prompt_all_models() {
         fi
     else
         if [[ "$GUM_AVAILABLE" == true ]]; then
-            OPUS_MODEL=$(gum input --placeholder "Enter default Opus model")
+            OPUS_MODEL=$(gum input --placeholder "Enter default Opus model" --prompt.foreground "205" --cursor.foreground "205" --placeholder.background "235")
+            echo -e "  ${GREEN}$OPUS_MODEL ${BLUE}will be set as the default Opus model.${NC}"
         else
             echo -n "Enter default Opus model: "
             read OPUS_MODEL_INPUT
@@ -611,10 +618,12 @@ prompt_all_models() {
     if [[ -n "$HAIKU_MODEL" ]]; then
         echo -e "  Current: ${YELLOW}$HAIKU_MODEL${NC}"
         if [[ "$GUM_AVAILABLE" == true ]]; then
-            HAIKU_MODEL=$(gum input --placeholder "Enter default Haiku model (empty to keep current)" --value "$HAIKU_MODEL")
+            local placeholder_text="Enter default Haiku model (current: $HAIKU_MODEL)"
+            HAIKU_MODEL=$(gum input --placeholder "$placeholder_text" --prompt.foreground "205" --cursor.foreground "205" --placeholder.background "235")
             if [[ -z "$HAIKU_MODEL" ]]; then
                 HAIKU_MODEL=$(jq -r '.env.ANTHROPIC_DEFAULT_HAIKU_MODEL // ""' "$FILE_CONFIG")
             fi
+            echo -e "  ${GREEN}$HAIKU_MODEL ${BLUE}will be set as the default Haiku model.${NC}"
         else
             echo -n "Enter default Haiku model (press Enter to keep current): "
             read HAIKU_MODEL_INPUT
@@ -624,7 +633,8 @@ prompt_all_models() {
         fi
     else
         if [[ "$GUM_AVAILABLE" == true ]]; then
-            HAIKU_MODEL=$(gum input --placeholder "Enter default Haiku model")
+            HAIKU_MODEL=$(gum input --placeholder "Enter default Haiku model" --prompt.foreground "205" --cursor.foreground "205" --placeholder.background "235")
+            echo -e "  ${GREEN}$HAIKU_MODEL ${BLUE}will be set as the default Haiku model.${NC}"
         else
             echo -n "Enter default Haiku model: "
             read HAIKU_MODEL_INPUT
@@ -646,14 +656,16 @@ display_current_config() {
     if [[ ! -f "$config_file" ]]; then
         if [[ "$quiet" != "true" ]]; then
             echo ""
-            echo "=== Current Configuration ==="
+            echo -e "${BLUE}=== Current Configuration ===${NC}"
+            echo ""
             echo -e "${YELLOW}No existing configuration found.${NC}"
         fi
         return 1
     fi
     
     echo ""
-    echo "=== Current Configuration ==="
+    echo -e "${BLUE}=== Current Configuration ===${NC}"
+    echo ""
     
     if ! jq empty "$config_file" 2>/dev/null; then
         echo -e "${YELLOW}Existing configuration is not valid JSON.${NC}"
@@ -666,11 +678,12 @@ display_current_config() {
         token="[masked]"
     fi
     
-    echo "  ANTHROPIC_AUTH_TOKEN: $token"
-    echo "  ANTHROPIC_BASE_URL: $(jq -r '.env.ANTHROPIC_BASE_URL // "(not set)"' "$config_file")"
-    echo "  ANTHROPIC_DEFAULT_SONNET_MODEL: $(jq -r '.env.ANTHROPIC_DEFAULT_SONNET_MODEL // "(not set)"' "$config_file")"
-    echo "  ANTHROPIC_DEFAULT_OPUS_MODEL: $(jq -r '.env.ANTHROPIC_DEFAULT_OPUS_MODEL // "(not set)"' "$config_file")"
-    echo "  ANTHROPIC_DEFAULT_HAIKU_MODEL: $(jq -r '.env.ANTHROPIC_DEFAULT_HAIKU_MODEL // "(not set)"' "$config_file")"
+    echo -e "  ${MAGENTA}ANTHROPIC_AUTH_TOKEN: ${GREEN}$token"
+    echo -e "  ${MAGENTA}ANTHROPIC_BASE_URL: ${GREEN}$(jq -r '.env.ANTHROPIC_BASE_URL // "(not set)"' "$config_file")"
+    echo ""
+    echo -e "  ${MAGENTA}ANTHROPIC_DEFAULT_SONNET_MODEL: ${GREEN}$(jq -r '.env.ANTHROPIC_DEFAULT_SONNET_MODEL // "(not set)"' "$config_file")"
+    echo -e "  ${MAGENTA}ANTHROPIC_DEFAULT_OPUS_MODEL: ${GREEN}$(jq -r '.env.ANTHROPIC_DEFAULT_OPUS_MODEL // "(not set)"' "$config_file")"
+    echo -e "  ${MAGENTA}ANTHROPIC_DEFAULT_HAIKU_MODEL: ${GREEN}$(jq -r '.env.ANTHROPIC_DEFAULT_HAIKU_MODEL // "(not set)"' "$config_file")"
     
     return 0
 }
@@ -1083,6 +1096,48 @@ main() {
     prompt_auth_token
     prompt_base_url
     prompt_all_models
+    
+    # Show final configuration preview and confirm before saving
+    echo ""
+    echo -e "${BLUE}=== Final Configuration Preview ===${NC}"
+    echo ""
+    echo -e "  ${MAGENTA}Provider:${NC} ${GREEN}$MODEL_PROVIDER${NC}"
+    echo -e "  ${MAGENTA}ANTHROPIC_BASE_URL:${NC} ${GREEN}$BASE_URL${NC}"
+    
+    # Mask the auth token for display
+    local masked_token
+    if [[ -n "$AUTH_TOKEN" ]]; then
+        masked_token="[masked]"
+    else
+        masked_token="[not set]"
+    fi
+    echo -e "  ${MAGENTA}ANTHROPIC_AUTH_TOKEN:${NC} ${GREEN}$masked_token${NC}"
+    
+    echo ""
+    echo -e "  ${MAGENTA}ANTHROPIC_DEFAULT_SONNET_MODEL:${NC} ${GREEN}$SONNET_MODEL${NC}"
+    echo -e "  ${MAGENTA}ANTHROPIC_DEFAULT_OPUS_MODEL:${NC} ${GREEN}$OPUS_MODEL${NC}"
+    echo -e "  ${MAGENTA}ANTHROPIC_DEFAULT_HAIKU_MODEL:${NC} ${GREEN}$HAIKU_MODEL${NC}"
+    echo ""
+    
+    if [[ "$GUM_AVAILABLE" == true ]]; then
+        gum confirm "Does this look correct?" && local confirm_save=true || local confirm_save=false
+        if [[ "$confirm_save" == false ]]; then
+            echo -e "${YELLOW}Configuration cancelled. No changes made.${NC}"
+            exit 0
+        fi
+    else
+        echo -n "Does this look correct? (y/n): "
+        local confirm
+        read confirm
+        case "$confirm" in
+            y|Y)
+                ;;
+            *)
+                echo -e "${YELLOW}Configuration cancelled. No changes made.${NC}"
+                exit 0
+                ;;
+        esac
+    fi
     
     echo ""
     echo -e "${BLUE}=== Saving Configuration ===${NC}"
