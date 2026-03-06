@@ -1,6 +1,16 @@
 <div align="center">
 
 # Claude Custom
+<p align="center">
+<pre>
+    ▄▄█▄▄    ▄▄█▄▄  
+   ██▀▀██   ██▀▀██ 
+   ██        ██     
+   ██        ██     
+   ██▄▄██   ██▄▄██  
+    ▀▀█▀▀    ▀▀█▀▀  
+</pre>
+</p>
 
 *An interactive Bash CLI tool that configures Claude Code's `settings.json` with your preferred AI model provider. Set up OpenRouter, Ollama, or a custom endpoint in seconds.*
 
@@ -27,6 +37,8 @@
 - **Smart Merging**: Preserves existing settings while updating credentials
 - **Automatic Backups**: Timestamped backups before any changes
 - **Reset Support**: Remove claude-custom keys with `--reset` option
+
+> **⚠️ Important**: When selecting models, ensure they support **tool use / function calling**. Not all models support this capability — check your provider's documentation for compatible models.
 
 ## 🔒 Security & Privacy
 

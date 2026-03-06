@@ -17,11 +17,27 @@ MAGENTA='\033[0;35m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
+# Function to display ASCII logo
+print_ascii_logo() {
+    local color="${1:-$CYAN}"
+    echo -e "${color}"
+    echo "    ▄▄█▄▄    ▄▄█▄▄  "
+    echo "   ██▀▀██   ██▀▀██ "
+    echo "   ██        ██     "
+    echo "   ██        ██     "
+    echo "   ██▄▄██   ██▄▄██  "
+    echo "    ▀▀█▀▀    ▀▀█▀▀  "
+    echo ""
+    echo "   Claude Custom v${SCRIPT_VERSION}"
+    echo -e "${NC}"
+}
+
 # Global variables
 CONFIG_SCOPE=""
 MODEL_PROVIDER=""
 FILE_CONFIG=""
 BACKUP_FILE=""
+GUM_AVAILABLE=false
 
 # Global variables for piped input handling
 PIPED_INPUT=""
@@ -38,6 +54,21 @@ check_jq_dependency() {
         echo "Please install jq: brew install jq (macOS) or apt-get install jq (Linux)"
         exit 1
     fi
+}
+
+# Check if gum is installed (for TUI features)
+check_gum_dependency() {
+    if ! command -v gum &> /dev/null; then
+        return 1
+    fi
+    return 0
+}
+
+# Show gum installation instructions
+show_gum_install() {
+    echo -e "${YELLOW}For enhanced TUI experience, install gum:${NC}"
+    echo "  brew install gum"
+    echo ""
 }
 
 # Detect and load existing settings.json
@@ -201,6 +232,28 @@ validate_writable() {
 }
 
 prompt_scope_selection() {
+    if [[ "$GUM_AVAILABLE" == true ]]; then
+        # Use gum for TUI selection
+        local choice
+        choice=$(gum choose --item.foreground 6 --selected.foreground 2 "Global configuration (~/.claude/settings.json)" "Project configuration (.claude/settings.json in current directory)")
+        
+        case "$choice" in
+            "Global configuration"*)
+                CONFIG_SCOPE="global"
+                FILE_CONFIG=$(get_global_config_path)
+                echo -e "${GREEN}✓ Selected: Global configuration${NC}"
+                return 0
+                ;;
+            "Project configuration"*)
+                CONFIG_SCOPE="project"
+                FILE_CONFIG=$(get_project_config_path)
+                echo -e "${GREEN}✓ Selected: Project configuration${NC}"
+                return 0
+                ;;
+        esac
+    fi
+    
+    # Fallback to original numeric input
     while true; do
         echo -e "${BLUE}Select configuration scope:${NC}"
         echo -e "  ${CYAN}1)${NC} Global   - ~/.claude/settings.json"
@@ -255,6 +308,31 @@ get_provider_base_url() {
 }
 
 prompt_provider_selection() {
+    if [[ "$GUM_AVAILABLE" == true ]]; then
+        # Use gum for TUI selection
+        local choice
+        choice=$(gum choose --item.foreground 6 --selected.foreground 2 "OpenRouter (uses OpenRouter API, base URL prefilled)" "Ollama (local Ollama server, default base URL prefilled)" "Custom (enter your own base URL)")
+        
+        case "$choice" in
+            "OpenRouter"*)
+                MODEL_PROVIDER="openrouter"
+                echo -e "${GREEN}✓ Selected: OpenRouter${NC}"
+                return 0
+                ;;
+            "Ollama"*)
+                MODEL_PROVIDER="ollama"
+                echo -e "${GREEN}✓ Selected: Ollama${NC}"
+                return 0
+                ;;
+            "Custom"*)
+                MODEL_PROVIDER="custom"
+                echo -e "${GREEN}✓ Selected: Custom${NC}"
+                return 0
+                ;;
+        esac
+    fi
+    
+    # Fallback to original numeric input
     while true; do
         echo ""
         echo -e "${BLUE}Select AI model provider:${NC}"
@@ -319,36 +397,51 @@ prompt_auth_token() {
     while [[ $retry_count -lt $max_retries ]]; do
         echo ""
         echo -e "${MAGENTA}ANTHROPIC_AUTH_TOKEN:${NC}"
+        
         if [[ -n "$AUTH_TOKEN" ]]; then
             echo -e "  Current: ${YELLOW}[masked]${NC}"
-            echo -n "  New value (press Enter to keep current): "
             
-            # Use stty to disable echo, read, then re-enable (with error handling)
-            if stty -echo 2>/dev/null; then
+            if [[ "$GUM_AVAILABLE" == true ]]; then
+                # Use gum for password input
                 local new_token
-                read new_token
-                local read_status=$?
-                stty echo 2>/dev/null
-                
-                if [[ $read_status -eq 0 ]] && [[ -n "$new_token" ]]; then
-                    AUTH_TOKEN="$new_token"
-                fi
-            else
-                echo -e "${YELLOW}Warning: Could not disable echo. Input will be visible.${NC}"
-                read new_token
+                new_token=$(gum input --password --placeholder "Enter new API token (leave empty to keep current)")
                 if [[ -n "$new_token" ]]; then
                     AUTH_TOKEN="$new_token"
                 fi
+            else
+                # Fallback to stty
+                echo -n "  New value (press Enter to keep current): "
+                if stty -echo 2>/dev/null; then
+                    local new_token
+                    read new_token
+                    local read_status=$?
+                    stty echo 2>/dev/null
+                    
+                    if [[ $read_status -eq 0 ]] && [[ -n "$new_token" ]]; then
+                        AUTH_TOKEN="$new_token"
+                    fi
+                else
+                    echo -e "${YELLOW}Warning: Could not disable echo. Input will be visible.${NC}"
+                    read new_token
+                    if [[ -n "$new_token" ]]; then
+                        AUTH_TOKEN="$new_token"
+                    fi
+                fi
             fi
         else
-            echo -n "Enter API token: "
-            if stty -echo 2>/dev/null; then
-                read AUTH_TOKEN
-                local read_status=$?
-                stty echo 2>/dev/null
+            if [[ "$GUM_AVAILABLE" == true ]]; then
+                # Use gum for password input
+                AUTH_TOKEN=$(gum input --password --placeholder "Enter API token")
             else
-                echo -e "${YELLOW}Warning: Could not disable echo. Input will be visible.${NC}"
-                read AUTH_TOKEN
+                echo -n "Enter API token: "
+                if stty -echo 2>/dev/null; then
+                    read AUTH_TOKEN
+                    local read_status=$?
+                    stty echo 2>/dev/null
+                else
+                    echo -e "${YELLOW}Warning: Could not disable echo. Input will be visible.${NC}"
+                    read AUTH_TOKEN
+                fi
             fi
         fi
         echo ""
@@ -381,13 +474,23 @@ prompt_base_url() {
         echo ""
         echo -e "${MAGENTA}ANTHROPIC_BASE_URL:${NC}"
         echo -e "  Default: ${YELLOW}$default_base_url${NC}"
-        echo -n "  New value (press Enter to keep default): "
-        local new_url
-        read new_url
-        if [[ -n "$new_url" ]]; then
-            BASE_URL="$new_url"
+        
+        if [[ "$GUM_AVAILABLE" == true ]]; then
+            local new_url
+            new_url=$(gum input --placeholder "Enter new value (leave empty to keep default)" --value "$default_base_url")
+            if [[ -n "$new_url" ]]; then
+                BASE_URL="$new_url"
+            else
+                BASE_URL="$default_base_url"
+            fi
         else
-            BASE_URL="$default_base_url"
+            echo -n "  New value (press Enter to keep default): "
+            read new_url
+            if [[ -n "$new_url" ]]; then
+                BASE_URL="$new_url"
+            else
+                BASE_URL="$default_base_url"
+            fi
         fi
         return 0
     fi
@@ -398,14 +501,27 @@ prompt_base_url() {
         echo -e "${MAGENTA}ANTHROPIC_BASE_URL:${NC}"
         if [[ -n "$BASE_URL" ]]; then
             echo -e "  Current: ${YELLOW}$BASE_URL${NC}"
-            echo -n "  New value (press Enter to keep current): "
-            read new_url
-            if [[ -n "$new_url" ]]; then
-                BASE_URL="$new_url"
+            
+            if [[ "$GUM_AVAILABLE" == true ]]; then
+                local new_url
+                new_url=$(gum input --placeholder "Enter base URL (leave empty to keep current)" --value "$BASE_URL")
+                if [[ -n "$new_url" ]]; then
+                    BASE_URL="$new_url"
+                fi
+            else
+                echo -n "  New value (press Enter to keep current): "
+                read new_url
+                if [[ -n "$new_url" ]]; then
+                    BASE_URL="$new_url"
+                fi
             fi
         else
-            echo -n "Enter base URL: "
-            read BASE_URL
+            if [[ "$GUM_AVAILABLE" == true ]]; then
+                BASE_URL=$(gum input --placeholder "Enter base URL (https://...)")
+            else
+                echo -n "Enter base URL: "
+                read BASE_URL
+            fi
         fi
 
         # Validate URL format
@@ -425,19 +541,39 @@ prompt_base_url() {
 prompt_all_models() {
     echo ""
     echo -e "${BLUE}=== Model Configuration ===${NC}"
+    echo ""
+    echo -e "${YELLOW}⚠️  Note: Ensure your selected models support tool use/function calling.${NC}"
+    echo -e "${YELLOW}   Not all models support this capability - check your provider's documentation.${NC}"
+    echo ""
     
     # SONNET_MODEL
     echo ""
     echo -e "${MAGENTA}ANTHROPIC_DEFAULT_SONNET_MODEL:${NC}"
     if [[ -n "$SONNET_MODEL" ]]; then
         echo -e "  Current: ${YELLOW}$SONNET_MODEL${NC}"
-        echo -n "Enter default Sonnet model (press Enter to keep current): "
+        if [[ "$GUM_AVAILABLE" == true ]]; then
+            SONNET_MODEL=$(gum input --placeholder "Enter default Sonnet model (empty to keep current)" --value "$SONNET_MODEL")
+            # If user entered empty, keep original value
+            if [[ -z "$SONNET_MODEL" ]]; then
+                SONNET_MODEL=$(jq -r '.env.ANTHROPIC_DEFAULT_SONNET_MODEL // ""' "$FILE_CONFIG")
+            fi
+        else
+            echo -n "Enter default Sonnet model (press Enter to keep current): "
+            read SONNET_MODEL_INPUT
+            if [[ -n "$SONNET_MODEL_INPUT" ]]; then
+                SONNET_MODEL="$SONNET_MODEL_INPUT"
+            fi
+        fi
     else
-        echo -n "Enter default Sonnet model: "
-    fi
-    read SONNET_MODEL_INPUT
-    if [[ -n "$SONNET_MODEL_INPUT" ]]; then
-        SONNET_MODEL="$SONNET_MODEL_INPUT"
+        if [[ "$GUM_AVAILABLE" == true ]]; then
+            SONNET_MODEL=$(gum input --placeholder "Enter default Sonnet model")
+        else
+            echo -n "Enter default Sonnet model: "
+            read SONNET_MODEL_INPUT
+            if [[ -n "$SONNET_MODEL_INPUT" ]]; then
+                SONNET_MODEL="$SONNET_MODEL_INPUT"
+            fi
+        fi
     fi
     
     # OPUS_MODEL
@@ -445,13 +581,28 @@ prompt_all_models() {
     echo -e "${MAGENTA}ANTHROPIC_DEFAULT_OPUS_MODEL:${NC}"
     if [[ -n "$OPUS_MODEL" ]]; then
         echo -e "  Current: ${YELLOW}$OPUS_MODEL${NC}"
-        echo -n "Enter default Opus model (press Enter to keep current): "
+        if [[ "$GUM_AVAILABLE" == true ]]; then
+            OPUS_MODEL=$(gum input --placeholder "Enter default Opus model (empty to keep current)" --value "$OPUS_MODEL")
+            if [[ -z "$OPUS_MODEL" ]]; then
+                OPUS_MODEL=$(jq -r '.env.ANTHROPIC_DEFAULT_OPUS_MODEL // ""' "$FILE_CONFIG")
+            fi
+        else
+            echo -n "Enter default Opus model (press Enter to keep current): "
+            read OPUS_MODEL_INPUT
+            if [[ -n "$OPUS_MODEL_INPUT" ]]; then
+                OPUS_MODEL="$OPUS_MODEL_INPUT"
+            fi
+        fi
     else
-        echo -n "Enter default Opus model: "
-    fi
-    read OPUS_MODEL_INPUT
-    if [[ -n "$OPUS_MODEL_INPUT" ]]; then
-        OPUS_MODEL="$OPUS_MODEL_INPUT"
+        if [[ "$GUM_AVAILABLE" == true ]]; then
+            OPUS_MODEL=$(gum input --placeholder "Enter default Opus model")
+        else
+            echo -n "Enter default Opus model: "
+            read OPUS_MODEL_INPUT
+            if [[ -n "$OPUS_MODEL_INPUT" ]]; then
+                OPUS_MODEL="$OPUS_MODEL_INPUT"
+            fi
+        fi
     fi
     
     # HAIKU_MODEL
@@ -459,13 +610,28 @@ prompt_all_models() {
     echo -e "${MAGENTA}ANTHROPIC_DEFAULT_HAIKU_MODEL:${NC}"
     if [[ -n "$HAIKU_MODEL" ]]; then
         echo -e "  Current: ${YELLOW}$HAIKU_MODEL${NC}"
-        echo -n "Enter default Haiku model (press Enter to keep current): "
+        if [[ "$GUM_AVAILABLE" == true ]]; then
+            HAIKU_MODEL=$(gum input --placeholder "Enter default Haiku model (empty to keep current)" --value "$HAIKU_MODEL")
+            if [[ -z "$HAIKU_MODEL" ]]; then
+                HAIKU_MODEL=$(jq -r '.env.ANTHROPIC_DEFAULT_HAIKU_MODEL // ""' "$FILE_CONFIG")
+            fi
+        else
+            echo -n "Enter default Haiku model (press Enter to keep current): "
+            read HAIKU_MODEL_INPUT
+            if [[ -n "$HAIKU_MODEL_INPUT" ]]; then
+                HAIKU_MODEL="$HAIKU_MODEL_INPUT"
+            fi
+        fi
     else
-        echo -n "Enter default Haiku model: "
-    fi
-    read HAIKU_MODEL_INPUT
-    if [[ -n "$HAIKU_MODEL_INPUT" ]]; then
-        HAIKU_MODEL="$HAIKU_MODEL_INPUT"
+        if [[ "$GUM_AVAILABLE" == true ]]; then
+            HAIKU_MODEL=$(gum input --placeholder "Enter default Haiku model")
+        else
+            echo -n "Enter default Haiku model: "
+            read HAIKU_MODEL_INPUT
+            if [[ -n "$HAIKU_MODEL_INPUT" ]]; then
+                HAIKU_MODEL="$HAIKU_MODEL_INPUT"
+            fi
+        fi
     fi
 }
 
@@ -520,22 +686,27 @@ prompt_create_config() {
     echo -e "${YELLOW}No configuration file exists at:${NC}"
     echo "  $config_file"
     echo ""
-    echo -n "Do you want to create a new configuration? (y/n): "
-    read confirm
     
-    case "$confirm" in
-        y|Y|"")
-            return 0
-            ;;
-        n|N)
-            echo "Aborted. No changes made."
-            exit 0
-            ;;
-        *)
-            echo -e "${RED}Invalid choice. Please enter y or n.${NC}"
-            prompt_create_config "$config_file"
-            ;;
-    esac
+    if [[ "$GUM_AVAILABLE" == true ]]; then
+        gum confirm "Do you want to create a new configuration?" && return 0 || (echo "Aborted. No changes made." && exit 0)
+    else
+        echo -n "Do you want to create a new configuration? (y/n): "
+        read confirm
+        
+        case "$confirm" in
+            y|Y|"")
+                return 0
+                ;;
+            n|N)
+                echo "Aborted. No changes made."
+                exit 0
+                ;;
+            *)
+                echo -e "${RED}Invalid choice. Please enter y or n.${NC}"
+                prompt_create_config "$config_file"
+                ;;
+        esac
+    fi
 }
 
 # ============================================================================
@@ -543,7 +714,7 @@ prompt_create_config() {
 # ============================================================================
 
 show_help() {
-    echo -e "${CYAN}Claude Custom v${SCRIPT_VERSION}${NC}"
+    print_ascii_logo "$CYAN"
     echo ""
     echo "An interactive Bash CLI tool that configures Claude Code's settings.json"
     echo "with your preferred AI model provider."
@@ -556,6 +727,9 @@ show_help() {
     echo "  -v, --version  Show version information"
     echo "  --reset        Reset configuration (remove claude-custom keys)"
     echo ""
+    echo -e "${BLUE}Optional Dependencies:${NC}"
+    echo "  gum            Enhanced TUI experience (brew install gum)"
+    echo ""
     echo -e "${BLUE}Author:${NC}"
     echo "  Arif Ariyan"
     echo "  https://beetlix.com"
@@ -565,7 +739,7 @@ show_help() {
 }
 
 show_version() {
-    echo -e "${CYAN}Claude Custom v${SCRIPT_VERSION}${NC}"
+    print_ascii_logo "$CYAN"
     echo ""
     echo -e "${BLUE}Author:${NC}  Arif Ariyan"
     echo -e "${BLUE}Web:${NC}      https://beetlix.com | https://riffcompiler.com"
@@ -640,6 +814,28 @@ read_input() {
 
 # Prompt user to select scope for reset
 prompt_reset_scope() {
+    if [[ "$GUM_AVAILABLE" == true ]]; then
+        # Use gum for TUI selection
+        local choice
+        choice=$(gum choose --item.foreground 6 --selected.foreground 2 "Global configuration (~/.claude/settings.json)" "Project configuration (.claude/settings.json in current directory)")
+        
+        case "$choice" in
+            "Global configuration"*)
+                CONFIG_SCOPE="global"
+                FILE_CONFIG=$(get_global_config_path)
+                echo -e "${GREEN}✓ Selected: Global configuration${NC}"
+                return 0
+                ;;
+            "Project configuration"*)
+                CONFIG_SCOPE="project"
+                FILE_CONFIG=$(get_project_config_path)
+                echo -e "${GREEN}✓ Selected: Project configuration${NC}"
+                return 0
+                ;;
+        esac
+    fi
+    
+    # Fallback to original numeric input
     while true; do
         echo -e "${BLUE}Select configuration scope to reset:${NC}"
         echo -e "  ${CYAN}1)${NC} Global   - ~/.claude/settings.json"
@@ -693,19 +889,24 @@ prompt_reset_confirmation() {
     echo -e "${YELLOW}WARNING: This will remove claude-custom configuration from your settings.${NC}"
     echo -e "A backup will be created before any changes.${NC}"
     echo ""
-    echo -n "Are you sure you want to reset? (y/n): "
-    local confirm
-    read_input confirm
     
-    case "$confirm" in
-        y|Y)
-            return 0
-            ;;
-        *)
-            echo -e "${YELLOW}Reset cancelled.${NC}"
-            return 1
-            ;;
-    esac
+    if [[ "$GUM_AVAILABLE" == true ]]; then
+        gum confirm "Are you sure you want to reset?" && return 0 || (echo -e "${YELLOW}Reset cancelled.${NC}" && return 1)
+    else
+        echo -n "Are you sure you want to reset? (y/n): "
+        local confirm
+        read_input confirm
+        
+        case "$confirm" in
+            y|Y)
+                return 0
+                ;;
+            *)
+                echo -e "${YELLOW}Reset cancelled.${NC}"
+                return 1
+                ;;
+        esac
+    fi
 }
 
 # Create backup of claude-custom keys before reset
@@ -785,6 +986,13 @@ handle_reset() {
     
     check_jq_dependency
     
+    # Check for gum availability and show installation hint if not present
+    if check_gum_dependency; then
+        GUM_AVAILABLE=true
+    else
+        show_gum_install
+    fi
+    
     # Initialize input buffer for piped input support
     init_input_buffer
     
@@ -844,10 +1052,17 @@ main() {
             ;;
     esac
     
-    echo -e "${BLUE}Claude Custom v${SCRIPT_VERSION}${NC}"
+    print_ascii_logo "$BLUE"
     echo ""
     
     check_jq_dependency
+    
+    # Check for gum availability and show installation hint if not present
+    if check_gum_dependency; then
+        GUM_AVAILABLE=true
+    else
+        show_gum_install
+    fi
     
     prompt_scope_selection
     
