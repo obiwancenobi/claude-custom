@@ -6,7 +6,7 @@
 
 <br>
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![Bash](https://img.shields.io/badge/Bash-4.0+-blue.svg)](https://www.gnu.org/software/bash/) [![100% Local](https://img.shields.io/badge/Local-100%25-brightgreen.svg)](https://github.com/obiwancenobi/claude-custom) [![Version](https://img.shields.io/badge/Version-1.0.0-informational)](https://github.com/obiwancenobi/claude-custom/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![Bash](https://img.shields.io/badge/Bash-4.0+-blue.svg)](https://www.gnu.org/software/bash/) [![100% Local](https://img.shields.io/badge/Local-100%25-brightgreen.svg)](https://github.com/obiwancenobi/claude-custom) [![Version](https://img.shields.io/badge/Version-1.2.0-informational)](https://github.com/obiwancenobi/claude-custom/releases)
 
 </div>
 
@@ -26,6 +26,7 @@
 - **Secure Input**: API tokens entered with masked input (echo disabled)
 - **Smart Merging**: Preserves existing settings while updating credentials
 - **Automatic Backups**: Timestamped backups before any changes
+- **Reset Support**: Remove claude-custom keys with `--reset` option
 
 ## 🔒 Security & Privacy
 
@@ -132,7 +133,7 @@ Run directly from the repository without installing:
 
 ```bash
 claude-custom --version
-# Claude Custom v1.0.0
+# Claude Custom v1.2.0
 ```
 
 ### Uninstall
@@ -154,6 +155,7 @@ claude-custom
 ```bash
 claude-custom --help     # Display this help message
 claude-custom --version  # Show version information
+claude-custom --reset    # Reset configuration (remove claude-custom keys)
 ```
 
 ### What Gets Configured
@@ -185,7 +187,27 @@ flowchart TD
 
     CheckArgs -->|--help| ShowHelp[Show help & exit]
     CheckArgs -->|--version| ShowVersion[Show version & exit]
+    CheckArgs -->|--reset| ResetFlow[Reset flow]
     CheckArgs -->|None| MainFlow[Main execution flow]
+
+    ResetFlow --> CheckJqReset{Check jq dependency}
+    CheckJqReset -->|Not installed| JqError[Error & exit]
+    CheckJqReset -->|Installed| PromptResetScope[Prompt for scope]
+    PromptResetScope --> GetResetScope{User choice}
+    GetResetScope -->|1 Global| SetResetGlobal[Set RESET_SCOPE=global]
+    GetResetScope -->|2 Project| SetResetProject[Set RESET_SCOPE=project]
+    SetResetGlobal --> CheckResetConfig{Config exists?}
+    SetResetProject --> CheckResetConfig
+    CheckResetConfig -->|No| NoConfig[No config to reset]
+    CheckResetConfig -->|Yes| DisplayResetInfo[Display current config]
+    DisplayResetInfo --> ConfirmReset{Prompt confirm?}
+    ConfirmReset -->|No| AbortReset[Abort]
+    ConfirmReset -->|Yes| CreateResetBackup[Create backup]
+    CreateResetBackup --> PerformReset[Remove claude-custom keys]
+    PerformReset --> ResetSuccess[Success message]
+    NoConfig --> End
+    AbortReset --> End
+    ResetSuccess --> End([Exit])
 
     MainFlow --> CheckJq{Check jq dependency}
     CheckJq -->|Not installed| JqError[Error & exit]
@@ -265,6 +287,9 @@ flowchart TD
     style JqError fill:#FFCCCB
     style WriteError fill:#FFCCCB
     style Abort fill:#FFD700
+    style ResetFlow fill:#E6E6FA
+    style ResetSuccess fill:#ADD8E6
+    style NoConfig fill:#FFD700
 ```
 
 ### Component Architecture
@@ -304,6 +329,15 @@ flowchart TB
         ShowHelp[show_help]
     end
 
+    subgraph Reset_Management
+        HandleReset[handle_reset]
+        PromptResetScope[prompt_reset_scope]
+        CheckConfigExists[check_config_exists]
+        PromptResetConfirm[prompt_reset_confirmation]
+        BackupClaudeConfig[backup_claude_config]
+        ResetConfig[reset_config]
+    end
+
     subgraph Signal_Cleanup
         Cleanup[cleanup]
         RestoreTerm[restore_terminal]
@@ -328,10 +362,17 @@ flowchart TB
     Main --> Backup
     Main --> SaveSettings
     Main --> ShowHelp
+    Main --> HandleReset
 
     PromptScope --> ValidateWritable
     ValidateWritable --> GlobalConfig
     ValidateWritable --> ProjectConfig
+
+    HandleReset --> PromptResetScope
+    PromptResetScope --> CheckConfigExists
+    CheckConfigExists --> PromptResetConfirm
+    PromptResetConfirm --> BackupClaudeConfig
+    BackupClaudeConfig --> ResetConfig
 
     PromptProvider --> GetProviderUrl
     GetProviderUrl --> GlobalConfig
@@ -385,13 +426,94 @@ flowchart LR
     Models --> OverrideEnv
 ```
 
+### Data Flow: Configuration Reset
+
+```mermaid
+flowchart LR
+    subgraph User_Input
+        RunReset[User runs: claude-custom --reset]
+        SelectScope[Select: Global or Project]
+        Confirm[Confirm reset]
+    end
+
+    subgraph Validation
+        CheckJq{Check jq installed?}
+        CheckConfig{Config exists?}
+    end
+
+    subgraph Reset_Process
+        BuildFilter[Build jq filter to delete keys]
+        Backup[Create backup of keys]
+        RemoveKeys[Remove claude-custom keys]
+    end
+
+    subgraph Keys_To_Remove
+        AuthToken[ANTHROPIC_AUTH_TOKEN]
+        ApiKey[ANTHROPIC_API_KEY]
+        BaseUrl[ANTHROPIC_BASE_URL]
+        Sonnet[ANTHROPIC_DEFAULT_SONNET_MODEL]
+        Opus[ANTHROPIC_DEFAULT_OPUS_MODEL]
+        Haiku[ANTHROPIC_DEFAULT_HAIKU_MODEL]
+    end
+
+    RunReset --> CheckJq
+    CheckJq -->|No| JqError[Error: jq required]
+    CheckJq -->|Yes| SelectScope
+    SelectScope --> CheckConfig
+    CheckConfig -->|No| NoConfig[Nothing to reset]
+    CheckConfig -->|Yes| Confirm
+    Confirm -->|No| Abort[Abort]
+    Confirm -->|Yes| BuildFilter
+    BuildFilter --> Backup
+    Backup --> RemoveKeys
+
+    AuthToken -.-> RemoveKeys
+    ApiKey -.-> RemoveKeys
+    BaseUrl -.-> RemoveKeys
+    Sonnet -.-> RemoveKeys
+    Opus -.-> RemoveKeys
+    Haiku -.-> RemoveKeys
+
+    RemoveKeys --> Success[Success]
+    NoConfig --> Success
+    Abort --> End
+
+    style RunReset fill:#E6E6FA
+    style ResetProcess fill:#E6E6FA
+    style Success fill:#ADD8E6
+    style JqError fill:#FFCCCB
+```
+
 ### State Machine: Configuration Scope & Provider
 
 ```mermaid
 stateDiagram-v2
     [*] --> Idle
 
-    Idle --> ScopeSelected: User runs script
+    Idle --> CheckArgs: User runs script
+    CheckArgs --> Help: --help
+    CheckArgs --> Version: --version
+    CheckArgs --> ResetFlow: --reset
+    CheckArgs --> ScopeSelected: No args
+
+    Help --> [*]
+    Version --> [*]
+
+    ResetFlow --> ResetScope: Valid jq
+    ResetScope --> ResetGlobal: Choose 1
+    ResetScope --> ResetProject: Choose 2
+    ResetGlobal --> CheckConfig: Exists
+    ResetProject --> CheckConfig
+    CheckConfig --> NoConfig: Not exists
+    CheckConfig --> ConfirmReset: Exists
+    NoConfig --> [*]
+    ConfirmReset --> AbortReset: No
+    ConfirmReset --> CreateBackup: Yes
+    AbortReset --> [*]
+    CreateBackup --> PerformReset: Confirmed
+    PerformReset --> ResetComplete: Success
+    ResetComplete --> [*]
+
     ScopeSelected --> GlobalScope: Choose 1
     ScopeSelected --> ProjectScope: Choose 2
 
@@ -460,6 +582,17 @@ claude-custom
 # → Scope: Project
 # → Provider: Ollama
 # → Uses http://localhost:11434 automatically
+```
+
+### Reset Configuration
+
+Remove claude-custom keys from your settings.json:
+
+```bash
+claude-custom --reset
+# → Select scope: Global or Project
+# → Confirm reset
+# → Backup created, keys removed
 ```
 
 ### Switch providers

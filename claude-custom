@@ -6,7 +6,7 @@
 # Author: Arif Ariyan
 # Websites: https://beetlix.com | https://riffcompiler.com
 
-SCRIPT_VERSION="1.0.0"
+SCRIPT_VERSION="1.2.0"
 
 # Color codes for output
 RED='\033[0;31m'
@@ -22,6 +22,10 @@ CONFIG_SCOPE=""
 MODEL_PROVIDER=""
 FILE_CONFIG=""
 BACKUP_FILE=""
+
+# Global variables for piped input handling
+PIPED_INPUT=""
+INPUT_BUFFER_POS=0
 
 # ============================================================================
 # Foundational Functions
@@ -550,6 +554,7 @@ show_help() {
     echo -e "${BLUE}Options:${NC}"
     echo "  -h, --help     Show this help message"
     echo "  -v, --version  Show version information"
+    echo "  --reset        Reset configuration (remove claude-custom keys)"
     echo ""
     echo -e "${BLUE}Author:${NC}"
     echo "  Arif Ariyan"
@@ -582,6 +587,244 @@ trap cleanup SIGINT SIGTERM
 trap restore_terminal EXIT
 
 # ============================================================================
+# Reset Functionality
+# ============================================================================
+
+# List of claude-custom keys to reset
+CLAUDE_CUSTOM_KEYS=(
+    "ANTHROPIC_AUTH_TOKEN"
+    "ANTHROPIC_API_KEY"
+    "ANTHROPIC_BASE_URL"
+    "ANTHROPIC_DEFAULT_SONNET_MODEL"
+    "ANTHROPIC_DEFAULT_OPUS_MODEL"
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL"
+)
+
+# Initialize input buffer from piped input if available
+init_input_buffer() {
+    # Check if stdin is a pipe (not a terminal)
+    if [[ ! -t 0 ]]; then
+        # Read all piped input into buffer
+        PIPED_INPUT=$(cat /dev/stdin 2>/dev/null)
+    fi
+}
+
+# Read input - uses buffer if available, otherwise interactive
+read_input() {
+    local var_name="$1"
+    
+    if [[ -n "$PIPED_INPUT" ]]; then
+        # Piped input mode - get next line from buffer
+        if [[ $INPUT_BUFFER_POS -lt ${#PIPED_INPUT} ]]; then
+            # Extract the next line
+            local remaining="${PIPED_INPUT:$INPUT_BUFFER_POS}"
+            local line
+            line=$(echo "$remaining" | head -n1)
+            
+            # Trim carriage return if present
+            line="${line//$'\r'/}"
+            
+            # Update position (add 1 for newline)
+            INPUT_BUFFER_POS=$((INPUT_BUFFER_POS + ${#line} + 1))
+            
+            # Set the variable using printf for safer assignment
+            printf -v "$var_name" '%s' "$line"
+        else
+            printf -v "$var_name" '%s' ''
+        fi
+    else
+        # Interactive mode - use regular read
+        read "$var_name"
+    fi
+}
+
+# Prompt user to select scope for reset
+prompt_reset_scope() {
+    while true; do
+        echo -e "${BLUE}Select configuration scope to reset:${NC}"
+        echo -e "  ${CYAN}1)${NC} Global   - ~/.claude/settings.json"
+        echo -e "  ${CYAN}2)${NC} Project  - .claude/settings.json (in current directory)"
+        echo ""
+        
+        local choice
+        echo -n "Enter your choice (1 or 2): "
+        read_input choice
+        
+        case "$choice" in
+            1)
+                CONFIG_SCOPE="global"
+                FILE_CONFIG=$(get_global_config_path)
+                echo -e "${GREEN}✓ Selected: Global configuration${NC}"
+                return 0
+                ;;
+            2)
+                CONFIG_SCOPE="project"
+                FILE_CONFIG=$(get_project_config_path)
+                echo -e "${GREEN}✓ Selected: Project configuration${NC}"
+                return 0
+                ;;
+            *)
+                echo -e "${RED}Invalid choice. Please enter 1 or 2.${NC}"
+                ;;
+        esac
+    done
+}
+
+# Check if configuration file exists at the selected scope
+check_config_exists() {
+    local config_file="$1"
+    
+    if [[ -f "$config_file" ]]; then
+        if jq empty "$config_file" 2>/dev/null; then
+            return 0
+        else
+            echo -e "${RED}Error: Configuration file exists but is not valid JSON${NC}"
+            return 1
+        fi
+    else
+        # File doesn't exist - this is not an error, just means nothing to reset
+        return 2
+    fi
+}
+
+# Prompt for confirmation before destructive reset
+prompt_reset_confirmation() {
+    echo ""
+    echo -e "${YELLOW}WARNING: This will remove claude-custom configuration from your settings.${NC}"
+    echo -e "A backup will be created before any changes.${NC}"
+    echo ""
+    echo -n "Are you sure you want to reset? (y/n): "
+    local confirm
+    read_input confirm
+    
+    case "$confirm" in
+        y|Y)
+            return 0
+            ;;
+        *)
+            echo -e "${YELLOW}Reset cancelled.${NC}"
+            return 1
+            ;;
+    esac
+}
+
+# Create backup of claude-custom keys before reset
+backup_claude_config() {
+    local config_file="$1"
+    local timestamp
+    timestamp=$(date +%Y%m%d_%H%M%S)
+    BACKUP_FILE="${config_file}.reset.${timestamp}"
+    
+    # Extract only claude-custom keys to backup using jq filter
+    local keys_json="[]"
+    for key in "${CLAUDE_CUSTOM_KEYS[@]}"; do
+        local value
+        value=$(jq -r ".env.${key} // \"\"" "$config_file" 2>/dev/null)
+        if [[ -n "$value" ]]; then
+            keys_json=$(echo "$keys_json" | jq --arg k "$key" --arg v "$value" '. + [{"key": $k, "value": $v}]')
+        fi
+    done
+    
+    # Build backup JSON from collected keys
+    local backup_json
+    backup_json=$(echo "$keys_json" | jq '{"env": [reduce .[] as $item ({}; . + {($item.key): $item.value})]}')
+    
+    local env_count
+    env_count=$(echo "$keys_json" | jq '. | length' 2>/dev/null)
+    if [[ "$env_count" -gt 0 ]]; then
+        echo "$backup_json" > "$BACKUP_FILE"
+        echo -e "${YELLOW}Backup saved to: $BACKUP_FILE${NC}"
+        return 0
+    else
+        echo -e "${YELLOW}No claude-custom keys found to backup.${NC}"
+        BACKUP_FILE=""
+        return 1
+    fi
+}
+
+# Reset claude-custom configuration
+reset_config() {
+    local config_file="$1"
+    
+    # Create backup first
+    backup_claude_config "$config_file"
+    
+    # Remove claude-custom keys from settings.json
+    local temp_file
+    temp_file=$(mktemp)
+    
+    # Build jq filter to remove all claude-custom keys
+    local jq_filter="."
+    for key in "${CLAUDE_CUSTOM_KEYS[@]}"; do
+        jq_filter="$jq_filter | del(.env.${key})"
+    done
+    
+    # Show jq errors for debugging if reset fails
+    local jq_error
+    if ! jq_error=$(jq "$jq_filter" "$config_file" > "$temp_file" 2>&1); then
+        rm -f "$temp_file"
+        echo -e "${RED}Error: Failed to process configuration file${NC}"
+        echo -e "${RED}Details: $jq_error${NC}"
+        return 1
+    fi
+    
+    if [[ -s "$temp_file" ]]; then
+        mv "$temp_file" "$config_file"
+        return 0
+    else
+        rm -f "$temp_file"
+        echo -e "${RED}Error: Failed to create valid configuration${NC}"
+        return 1
+    fi
+}
+
+# Handle reset operation
+handle_reset() {
+    echo -e "${BLUE}Claude Custom - Reset Configuration${NC}"
+    echo ""
+    
+    check_jq_dependency
+    
+    # Initialize input buffer for piped input support
+    init_input_buffer
+    
+    # Prompt for scope selection
+    prompt_reset_scope
+    
+    # Check if config file exists
+    if ! check_config_exists "$FILE_CONFIG"; then
+        echo ""
+        echo -e "${YELLOW}No configuration found at:${NC}"
+        echo "  $FILE_CONFIG"
+        echo ""
+        echo -e "${CYAN}Nothing to reset.${NC}"
+        exit 0
+    fi
+    
+    # Display current config info
+    display_current_config "$FILE_CONFIG" "true"
+    
+    # Prompt for confirmation
+    if ! prompt_reset_confirmation; then
+        exit 0
+    fi
+    
+    # Perform reset
+    if reset_config "$FILE_CONFIG"; then
+        echo ""
+        echo -e "${GREEN}✓ Configuration reset successfully!${NC}"
+        if [[ -n "$BACKUP_FILE" ]]; then
+            echo -e "${YELLOW}Backup saved to: $BACKUP_FILE${NC}"
+        fi
+        echo ""
+        echo -e "${YELLOW}Please restart Claude Code for changes to take effect.${NC}"
+    else
+        echo -e "${RED}Error: Failed to reset configuration${NC}"
+        exit 1
+    fi
+}
+
+# ============================================================================
 # Main Execution Flow
 # ============================================================================
 
@@ -593,6 +836,10 @@ main() {
             ;;
         -v|--version)
             show_version
+            exit 0
+            ;;
+        --reset)
+            handle_reset
             exit 0
             ;;
     esac
