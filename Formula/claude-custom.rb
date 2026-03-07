@@ -2,7 +2,7 @@
 #                https://rubydoc.brew.sh/Formula
 # PLEASE REMOVE ALL GENERATED COMMENTS BEFORE SUBMITTING YOUR PULL REQUEST!
 
-class Claudecustom < Formula
+class ClaudeCustom < Formula
   desc "Configure Claude Code with custom AI model providers (OpenRouter, Ollama, Cerebras, etc.)"
   homepage "https://github.com/obiwancenobi/claude-custom"
   url "https://raw.githubusercontent.com/obiwancenobi/claude-custom/main/claude-custom"

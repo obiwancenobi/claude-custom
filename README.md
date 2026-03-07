@@ -82,13 +82,14 @@ apk add jq
 Install the formula:
 
 ```bash
-brew install obiwancenobi/claude-custom
+brew tap obiwancenobi/claude-custom https://github.com/obiwancenobi/claude-custom
+brew install claude-custom
 ```
 
 Update and upgrade:
 
 ```bash
-brew update && brew upgrade obiwancenobi/claude-custom
+brew update && brew upgrade claude-custom
 ```
 
 ### Option 2: Quick Install (One-Liner)
