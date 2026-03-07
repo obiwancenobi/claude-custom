@@ -311,7 +311,7 @@ prompt_provider_selection() {
     if [[ "$GUM_AVAILABLE" == true ]]; then
         # Use gum for TUI selection
         local choice
-        choice=$(gum choose --item.foreground 6 --selected.foreground 2 "OpenRouter (uses OpenRouter API, base URL prefilled)" "Ollama (local Ollama server, default base URL prefilled)" "Custom (enter your own base URL)")
+        choice=$(gum choose --item.foreground 6 --selected.foreground 2 "OpenRouter (uses OpenRouter API, base URL prefilled)" "Ollama (local Ollama server, default base URL prefilled)" "Custom (enter your own base URL, Cerebras, AWS Bedrock, Azure AI, etc.)")
         
         case "$choice" in
             "OpenRouter"*)
@@ -338,7 +338,7 @@ prompt_provider_selection() {
         echo -e "${BLUE}Select AI model provider:${NC}"
         echo -e "  ${CYAN}1)${NC} OpenRouter  - Uses OpenRouter API (base URL prefilled)"
         echo -e "  ${CYAN}2)${NC} Ollama      - Local Ollama server (default base URL prefilled)"
-        echo -e "  ${CYAN}3)${NC} Custom      - Enter your own base URL"
+        echo -e "  ${CYAN}3)${NC} Custom      - Enter your own base URL, Cerebras, AWS Bedrock, Azure AI, etc."
         echo ""
         
         local choice
@@ -447,6 +447,7 @@ prompt_auth_token() {
         echo ""
         
         if [[ -n "$AUTH_TOKEN" ]]; then
+            echo -e "  ${YELLOW}[masked] ${BLUE}will be set as Anthropic Auth Token.${NC}"
             return 0
         fi
         
@@ -532,6 +533,7 @@ prompt_base_url() {
         fi
 
         if [[ -n "$BASE_URL" ]]; then
+            echo -e "  ${GREEN}$BASE_URL ${BLUE}will be set as the base URL.${NC}"
             return 0
         fi
 
