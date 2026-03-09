@@ -36,7 +36,7 @@
 - **Secure Input**: API tokens entered with masked input (echo disabled)
 - **Smart Merging**: Preserves existing settings while updating credentials
 - **Automatic Backups**: Timestamped backups before any changes
-- **Reset Support**: Remove claude-custom keys with `--reset` option
+- **Reset Support**: Remove claude-custom keys with `-r` or `--reset` option
 
 > **⚠️ Important**: When selecting models, ensure they support **tool use / function calling**. Not all models support this capability — check your provider's documentation for compatible models.
 
@@ -166,9 +166,9 @@ claude-custom
 ### Command-Line Options
 
 ```bash
-claude-custom --help     # Display this help message
-claude-custom --version  # Show version information
-claude-custom --reset    # Reset configuration (remove claude-custom keys)
+claude-custom -h, --help     # Display this help message
+claude-custom -v, --version  # Show version information
+claude-custom -r, --reset  # Reset configuration (remove claude-custom keys)
 ```
 
 ### What Gets Configured
@@ -221,7 +221,7 @@ claude-custom
 Remove claude-custom keys from your settings.json:
 
 ```bash
-claude-custom --reset
+claude-custom -r
 # → Select scope: Global or Project
 # → Confirm reset
 # → Backup created, keys removed
