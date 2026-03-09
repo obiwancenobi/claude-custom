@@ -16,7 +16,7 @@
 
 <br>
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![Bash](https://img.shields.io/badge/Bash-4.0+-blue.svg)](https://www.gnu.org/software/bash/) [![100% Local](https://img.shields.io/badge/Local-100%25-brightgreen.svg)](https://github.com/obiwancenobi/claude-custom) [![Version](https://img.shields.io/badge/Version-1.2.0-informational)](https://github.com/obiwancenobi/claude-custom/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![Bash](https://img.shields.io/badge/Bash-4.0+-blue.svg)](https://www.gnu.org/software/bash/) [![100% Local](https://img.shields.io/badge/Local-100%25-brightgreen.svg)](https://github.com/obiwancenobi/claude-custom) [![Version](https://img.shields.io/badge/Version-1.3.0-informational)](https://github.com/obiwancenobi/claude-custom/releases)
 
 </div>
 
@@ -36,7 +36,7 @@
 - **Secure Input**: API tokens entered with masked input (echo disabled)
 - **Smart Merging**: Preserves existing settings while updating credentials
 - **Automatic Backups**: Timestamped backups before any changes
-- **Reset Support**: Remove claude-custom keys with `--reset` option
+- **Reset Support**: Remove claude-custom keys with `-r` or `--reset` option
 
 > **⚠️ Important**: When selecting models, ensure they support **tool use / function calling**. Not all models support this capability — check your provider's documentation for compatible models.
 
@@ -146,7 +146,7 @@ Run directly from the repository without installing:
 
 ```bash
 claude-custom --version
-# Claude Custom v1.2.0
+# Claude Custom v1.3.0
 ```
 
 ### Uninstall
@@ -166,9 +166,9 @@ claude-custom
 ### Command-Line Options
 
 ```bash
-claude-custom --help     # Display this help message
-claude-custom --version  # Show version information
-claude-custom --reset    # Reset configuration (remove claude-custom keys)
+claude-custom -h, --help     # Display this help message
+claude-custom -v, --version  # Show version information
+claude-custom -r, --reset  # Reset configuration (remove claude-custom keys)
 ```
 
 ### What Gets Configured
@@ -221,7 +221,7 @@ claude-custom
 Remove claude-custom keys from your settings.json:
 
 ```bash
-claude-custom --reset
+claude-custom -r
 # → Select scope: Global or Project
 # → Confirm reset
 # → Backup created, keys removed
