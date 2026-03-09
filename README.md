@@ -16,7 +16,7 @@
 
 <br>
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![Bash](https://img.shields.io/badge/Bash-4.0+-blue.svg)](https://www.gnu.org/software/bash/) [![100% Local](https://img.shields.io/badge/Local-100%25-brightgreen.svg)](https://github.com/obiwancenobi/claude-custom) [![Version](https://img.shields.io/badge/Version-1.3.0-informational)](https://github.com/obiwancenobi/claude-custom/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![Bash](https://img.shields.io/badge/Bash-4.0+-blue.svg)](https://www.gnu.org/software/bash/) [![100% Local](https://img.shields.io/badge/Local-100%25-brightgreen.svg)](https://github.com/obiwancenobi/claude-custom) [![Version](https://img.shields.io/badge/Version-1.3.1-informational)](https://github.com/obiwancenobi/claude-custom/releases)
 
 </div>
 
@@ -146,7 +146,7 @@ Run directly from the repository without installing:
 
 ```bash
 claude-custom --version
-# Claude Custom v1.3.0
+# Claude Custom v1.3.1
 ```
 
 ### Uninstall

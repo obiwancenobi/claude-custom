@@ -6,7 +6,7 @@
 # Author: Arif Ariyan
 # Websites: https://beetlix.com | https://riffcompiler.com
 
-SCRIPT_VERSION="1.3.0"
+SCRIPT_VERSION="1.3.1"
 
 # Color codes for output
 RED='\033[0;31m'
@@ -715,7 +715,6 @@ prompt_all_models() {
     else
         if [[ "$GUM_AVAILABLE" == true ]]; then
             OPUS_MODEL=$(gum input --placeholder "Enter default Opus model" --prompt.foreground "205" --cursor.foreground "205" --placeholder.background "235")
-            print_success "${GREEN}$OPUS_MODEL ${BLUE}will be set as the default Opus model."
         else
             echo -n "Enter default Opus model: "
             read OPUS_MODEL_INPUT
