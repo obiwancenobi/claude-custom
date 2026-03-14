@@ -22,10 +22,6 @@
 
 ---
 
-## 🖼️ Preview
-
-<img src="images/screenshot-1.png" alt="claude-custom interactive wizard" width="600"/>
-
 ## ✨ Features
 
 - **Flexible Scope**: Configure globally (`~/.claude/settings.json`) or per-project (`.claude/settings.json`)
@@ -39,8 +35,6 @@
 - **Reset Support**: Remove claude-custom keys with `-r` or `--reset` option
 - **Statusline**: Optional colorful prompt statusline showing model, tokens, git, context bar, session duration, turn count, unpushed commits
 - **Statusline Themes**: Choose between detailed, compact, or monochrome display modes
-
-<img src="images/screenshot-statusline.png" alt="statusline showing model, tokens, git, context bar, duration, turns, cost" width="800"/>
 
 > **⚠️ Important**: When selecting models, ensure they support **tool use / function calling**. Not all models support this capability — check your provider's documentation for compatible models.
 
@@ -202,7 +196,13 @@ The tool writes these environment variables to Claude Code's `settings.json`:
 | `ANTHROPIC_DEFAULT_HAIKU_MODEL` | Default Haiku model name |
 | `STATUSLINE_THEME` | Statusline display theme (`detailed`/`compact`/`monochrome`) |
 
-## 🎯 Statusline (Optional Feature)
+## 🖼️ Preview
+
+<img src="images/screenshot-1.png" alt="claude-custom interactive wizard" width="600"/>
+
+# 🎯 Statusline
+
+<img src="images/theme-detailed.png" alt="statusline showing model, tokens, git, context bar, duration, turns, cost" width="800"/>
 
 Enable a colorful statusline in your Claude Code prompt that displays:
 
@@ -246,8 +246,6 @@ claude-custom --theme
 
 Theme is stored in `settings.json` under `env.STATUSLINE_THEME`.
 
-### Statusline Preview
-
 **Detailed** (default) — Full info with colors, 2-line layout:
 <img src="images/theme-detailed.png" alt="detailed theme" width="800"/>
 
@@ -256,23 +254,6 @@ Theme is stored in `settings.json` under `env.STATUSLINE_THEME`.
 
 **Monochrome** — No colors, plain text:
 <img src="images/theme-monochrome.png" alt="monochrome theme" width="800"/>
-
-**Detailed theme (default):**
-```
-🤖 claude-sonnet-4-20250514 │ ↑15234 ↓4521 │ ⎇ myproject@main +3-0 ↑2
-📊 ████████░░ 65% │ ⏱ 12m34s 💬 8 │ 💰 $0.025
-```
-
-**Compact theme:**
-```
-🤖 claude-sonnet-4-20250514 │ ⎇ myproject@main │ 65%
-```
-
-**Monochrome theme:**
-```
-🤖 claude-sonnet-4-20250514 | ↑15234 ↓4521 | ⎇ myproject@main +3-0 ↑2
-📊 ████████░░ 65% | ⏱ 12m34s 💬 8 | 💰 $0.025
-```
 
 ## 🛠️ How It Works
 
