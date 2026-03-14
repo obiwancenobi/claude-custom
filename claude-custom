@@ -6,7 +6,7 @@
 # Author: Arif Ariyan
 # Websites: https://beetlix.com | https://riffcompiler.com
 
-SCRIPT_VERSION="1.3.1"
+SCRIPT_VERSION="1.4.0"
 
 # Color codes for output
 RED='\033[0;31m'
@@ -347,7 +347,7 @@ prompt_scope_selection() {
 
         local choice
         echo -n "Enter your choice (1 or 2): "
-        read choice
+        read_input choice
 
         case "$choice" in
             1)
@@ -843,15 +843,25 @@ show_help() {
     print_ascii_logo "$CYAN"
     echo ""
     echo "An interactive Bash CLI tool that configures Claude Code's settings.json"
-    echo "with your preferred AI model provider."
+    echo "with your preferred AI model provider and statusline."
     echo ""
     echo -e "${BLUE}Usage:${NC}"
     echo "  claude-custom [OPTIONS]"
     echo ""
     echo -e "${BLUE}Options:${NC}"
-    echo "  -h, --help     Show this help message"
-    echo "  -v, --version  Show version information"
-    echo "  -r, --reset    Reset configuration (remove claude-custom keys)"
+    echo "  -h, --help             Show this help message"
+    echo "  -v, --version          Show version information"
+    echo "  -s, --status           Enable statusline in prompt"
+    echo "  -S, --status-disable   Disable statusline in prompt"
+    echo "  -t, --theme            Set statusline theme"
+    echo "  -r, --reset            Reset configuration"
+    echo ""
+    echo -e "${BLUE}Examples:${NC}"
+    echo "  claude-custom                    # Configure API settings"
+    echo "  claude-custom --status           # Enable statusline"
+    echo "  claude-custom --status-disable   # Disable statusline"
+    echo "  claude-custom --theme            # Choose statusline theme"
+    echo "  claude-custom --reset            # Reset config"
     echo ""
     echo -e "${BLUE}Optional Dependencies:${NC}"
     echo "  gum            Enhanced TUI experience (brew install gum)"
@@ -867,7 +877,7 @@ show_help() {
 show_version() {
     print_ascii_logo "$CYAN"
     echo ""
-    echo -e "${BLUE}Author:${NC}  Arif Ariyan"
+    echo -e "${BLUE}Author:${NC}   Arif Ariyan"
     echo -e "${BLUE}Web:${NC}      https://beetlix.com | https://riffcompiler.com"
     echo -e "${BLUE}Repo:${NC}     https://github.com/obiwancenobi/claude-custom"
 }
@@ -1165,6 +1175,285 @@ handle_reset() {
 }
 
 # ============================================================================
+# Statusline Functions
+# ============================================================================
+
+# Handle statusline enable (--status/-s)
+handle_statusline() {
+    print_ascii_logo "$BLUE"
+    print_header "" "       ${GREEN}Enable Statusline"
+    
+    check_jq_dependency
+    
+    # Check for gum availability - use same logic as main()
+    if [[ "$USE_GUM" == true ]] && check_gum_dependency; then
+        GUM_AVAILABLE=true
+    else
+        if [[ "$USE_GUM" == true ]]; then
+            show_gum_install
+        fi
+        GUM_AVAILABLE=false
+    fi
+        
+    # Step 1: Select scope using reusable function
+    prompt_scope_selection
+
+    # Validate the config file is writable before proceeding
+    if ! validate_writable "$FILE_CONFIG"; then
+        echo -e "${RED}Error: Cannot proceed without writable configuration path${NC}"
+        exit 1
+    fi
+    
+    # Step 2: Confirm - use same pattern as main() lines 1523-1541 but with fallback
+    echo ""
+    echo -e "${CYAN}This will enable the Claude statusline in your prompt.${NC}"
+    echo -e "${MAGENTA}The statusline shows: ${GREEN}Model ID, Tokens, Git branch, Context bar, Compaction, Cost${NC}"
+    echo ""
+    
+    if [[ "$GUM_AVAILABLE" == true ]]; then
+        gum confirm "Enable statusline?" && local confirm_save=true || local confirm_save=false
+        if [[ "$confirm_save" == false ]]; then
+            echo -e "${YELLOW}Configuration cancelled. No changes made.${NC}"
+            exit 0
+        fi
+    else
+        echo -n "Enable statusline? (y/n): "
+        local confirm
+        read_input confirm
+        case "$confirm" in
+            y|Y)
+                ;;
+            *)
+                echo -e "${YELLOW}Configuration cancelled. No changes made.${NC}"
+                exit 0
+                ;;
+        esac
+    fi
+    
+    # Save config — statusline.sh is executed directly by Claude Code, not sourced
+
+    # Create directory if needed
+    local dir
+    dir=$(dirname "$FILE_CONFIG")
+    [[ ! -d "$dir" ]] && mkdir -p "$dir"
+    
+    # Copy statusline script to appropriate location based on scope
+    local script_dir
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local statusline_script="$script_dir/functions/statusline.sh"
+    local command_path=""
+
+    if [[ -f "$statusline_script" ]]; then
+        if [[ "$CONFIG_SCOPE" == "global" ]]; then
+            mkdir -p "$HOME/.claude"
+            cp "$statusline_script" "$HOME/.claude/statusline.sh"
+            chmod +x "$HOME/.claude/statusline.sh"
+            command_path="~/.claude/statusline.sh"
+            echo -e "${GREEN}✓${MAGENTA} Copied statusline script to ${GREEN}~/.claude/statusline.sh"
+        else
+            mkdir -p ".claude"
+            cp "$statusline_script" ".claude/statusline.sh"
+            chmod +x ".claude/statusline.sh"
+            command_path=".claude/statusline.sh"
+            echo -e "${GREEN}✓${MAGENTA} Copied statusline script to ${GREEN}.claude/statusline.sh"
+        fi
+    fi
+
+    # Save statusline config, preserving existing settings
+    if [[ -f "$FILE_CONFIG" ]] && jq empty "$FILE_CONFIG" 2>/dev/null; then
+        jq --arg cmd "$command_path" \
+            '.statusLine = {"type": "command", "command": $cmd, "padding": 2}
+             | .env.STATUSLINE_THEME //= "detailed"' \
+            "$FILE_CONFIG" > "${FILE_CONFIG}.tmp" && mv "${FILE_CONFIG}.tmp" "$FILE_CONFIG"
+    else
+        jq -n --arg cmd "$command_path" \
+            '{"statusLine": {"type": "command", "command": $cmd, "padding": 2}, "env": {"STATUSLINE_THEME": "detailed"}}' \
+            > "$FILE_CONFIG"
+    fi
+    
+    echo ""
+    print_separator
+    print_success "${GREEN}Statusline enabled successfully!"
+    print_separator
+    echo ""
+    echo -e "${YELLOW}Restart Claude Code to see your new statusline!${NC}"
+    echo ""
+}
+
+# Handle statusline disable (--status-disable/-S)
+handle_statusline_disable() {
+    print_ascii_logo "$BLUE"
+    print_header "" "       ${YELLOW}Disable Statusline"
+
+    check_jq_dependency
+
+    # Check for gum availability and show installation hint if not present
+    if [[ "$USE_GUM" == true ]] && check_gum_dependency; then
+        GUM_AVAILABLE=true
+    else
+        if [[ "$USE_GUM" == true ]]; then
+            show_gum_install
+        fi
+        GUM_AVAILABLE=false
+    fi
+
+    # Prompt for scope selection
+    prompt_scope_selection
+
+    if ! check_config_exists "$FILE_CONFIG"; then
+        echo ""
+        print_warning "No configuration found at:"
+        echo "  $FILE_CONFIG"
+        echo ""
+        print_info "Nothing to disable."
+        exit 0
+    fi
+
+    # Check if statusLine key exists
+    local has_statusline
+    has_statusline=$(jq -e '.statusLine' "$FILE_CONFIG" 2>/dev/null)
+    if [[ -z "$has_statusline" ]]; then
+        echo ""
+        print_info "Statusline is not currently enabled."
+        exit 0
+    fi
+
+    # Confirm
+    echo ""
+    echo -e "${CYAN}This will remove the statusline configuration.${NC}"
+    echo ""
+
+    if [[ "$GUM_AVAILABLE" == true ]]; then
+        gum confirm "Disable statusline?" && local confirm=true || local confirm=false
+        if [[ "$confirm" == false ]]; then
+            echo -e "${YELLOW}Cancelled. No changes made.${NC}"
+            exit 0
+        fi
+    else
+        echo -n "Disable statusline? (y/n): "
+        local answer
+        read_input answer
+        case "$answer" in
+            y|Y) ;;
+            *)
+                echo -e "${YELLOW}Cancelled. No changes made.${NC}"
+                exit 0
+                ;;
+        esac
+    fi
+
+    # Backup before modifying
+    backup_settings "$FILE_CONFIG"
+
+    # Remove statusLine key from config
+    jq 'del(.statusLine)' "$FILE_CONFIG" > "${FILE_CONFIG}.tmp" && mv "${FILE_CONFIG}.tmp" "$FILE_CONFIG"
+
+    # Remove the copied statusline script
+    if [[ "$CONFIG_SCOPE" == "global" ]]; then
+        rm -f "$HOME/.claude/statusline.sh"
+    else
+        rm -f ".claude/statusline.sh"
+    fi
+
+    echo ""
+    print_separator
+    print_success "${GREEN}Statusline disabled successfully!"
+    print_separator
+    echo ""
+    echo -e "${YELLOW}Restart Claude Code for changes to take effect.${NC}"
+    echo ""
+}
+
+# ============================================================================
+# Theme Configuration
+# ============================================================================
+
+handle_theme() {
+    print_ascii_logo "$BLUE"
+    print_header "" "       ${CYAN}Statusline Theme"
+
+    check_jq_dependency
+
+    # Check for gum availability
+    if [[ "$USE_GUM" == true ]] && check_gum_dependency; then
+        GUM_AVAILABLE=true
+    else
+        if [[ "$USE_GUM" == true ]]; then
+            show_gum_install
+        fi
+        GUM_AVAILABLE=false
+    fi
+
+    # Prompt for scope selection
+    prompt_scope_selection
+
+    # Show current theme if set
+    local current_theme="detailed"
+    if [[ -f "$FILE_CONFIG" ]]; then
+        local saved
+        saved=$(jq -r '.env.STATUSLINE_THEME // ""' "$FILE_CONFIG" 2>/dev/null)
+        [[ -n "$saved" ]] && current_theme="$saved"
+    fi
+
+    echo ""
+    echo -e "${DIM}Current theme: ${CYAN}${current_theme}${NC}"
+    echo ""
+    echo -e "${BLUE}Available themes:${NC}"
+    echo ""
+    echo -e "  ${CYAN}1.${NC} ${GREEN}detailed${NC}      - Full info: model, tokens, git, duration, turns, cost"
+    echo -e "  ${CYAN}2.${NC} ${BLUE}compact${NC}       - Minimal: model, branch, context % only"
+    echo -e "  ${CYAN}3.${NC} ${DIM}monochrome${NC}    - No colors, plain text"
+    echo ""
+
+    local choice
+    if [[ "$GUM_AVAILABLE" == true ]]; then
+        choice=$(gum choose \
+            --item.foreground 6 \
+            --selected.foreground 2 \
+            "detailed" \
+            "compact" \
+            "monochrome")
+    else
+        echo -n "Select theme (1/2/3): "
+        read_input choice
+        case "$choice" in
+            1) choice="detailed" ;;
+            2) choice="compact" ;;
+            3) choice="monochrome" ;;
+            "") choice="" ;;
+        esac
+    fi
+
+    if [[ -z "$choice" ]]; then
+        echo -e "${YELLOW}No selection. Aborted.${NC}"
+        exit 0
+    fi
+
+    # Save to settings.json
+    local dir
+    dir=$(dirname "$FILE_CONFIG")
+    [[ ! -d "$dir" ]] && mkdir -p "$dir"
+
+    if [[ -f "$FILE_CONFIG" ]] && jq empty "$FILE_CONFIG" 2>/dev/null; then
+        jq --arg theme "$choice" \
+            '.env.STATUSLINE_THEME = $theme' \
+            "$FILE_CONFIG" > "${FILE_CONFIG}.tmp" && mv "${FILE_CONFIG}.tmp" "$FILE_CONFIG"
+    else
+        jq -n --arg theme "$choice" \
+            '{"env": {"STATUSLINE_THEME": $theme}}' \
+            > "$FILE_CONFIG"
+    fi
+
+    echo ""
+    print_separator
+    print_success "Statusline theme set to: ${GREEN}${choice}${NC}"
+    print_separator
+    echo ""
+    echo -e "${YELLOW}Restart Claude Code to see the new theme!${NC}"
+    echo ""
+}
+
+# ============================================================================
 # Main Execution Flow
 # ============================================================================
 
@@ -1178,8 +1467,20 @@ main() {
             show_version
             exit 0
             ;;
+        -s|--status)
+            handle_statusline
+            exit 0
+            ;;
+        -S|--status-disable)
+            handle_statusline_disable
+            exit 0
+            ;;
         -r|--reset)
             handle_reset
+            exit 0
+            ;;
+        -t|--theme)
+            handle_theme
             exit 0
             ;;
     esac
@@ -1240,6 +1541,7 @@ main() {
     echo -e "  ${MAGENTA}ANTHROPIC_DEFAULT_SONNET_MODEL:${NC} ${GREEN}$SONNET_MODEL${NC}"
     echo -e "  ${MAGENTA}ANTHROPIC_DEFAULT_OPUS_MODEL:${NC} ${GREEN}$OPUS_MODEL${NC}"
     echo -e "  ${MAGENTA}ANTHROPIC_DEFAULT_HAIKU_MODEL:${NC} ${GREEN}$HAIKU_MODEL${NC}"
+    echo ""
 
     if [[ "$GUM_AVAILABLE" == true ]]; then
         gum confirm "Does this look correct?" && local confirm_save=true || local confirm_save=false
@@ -1250,7 +1552,7 @@ main() {
     else
         echo -n "Does this look correct? (y/n): "
         local confirm
-        read confirm
+        read_input confirm
         case "$confirm" in
             y|Y)
                 ;;

@@ -16,7 +16,7 @@
 
 <br>
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![Bash](https://img.shields.io/badge/Bash-4.0+-blue.svg)](https://www.gnu.org/software/bash/) [![100% Local](https://img.shields.io/badge/Local-100%25-brightgreen.svg)](https://github.com/obiwancenobi/claude-custom) [![Version](https://img.shields.io/badge/Version-1.3.1-informational)](https://github.com/obiwancenobi/claude-custom/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![Bash](https://img.shields.io/badge/Bash-4.0+-blue.svg)](https://www.gnu.org/software/bash/) [![100% Local](https://img.shields.io/badge/Local-100%25-brightgreen.svg)](https://github.com/obiwancenobi/claude-custom) [![Version](https://img.shields.io/badge/Version-1.4.0-informational)](https://github.com/obiwancenobi/claude-custom/releases)
 
 </div>
 
@@ -37,6 +37,10 @@
 - **Smart Merging**: Preserves existing settings while updating credentials
 - **Automatic Backups**: Timestamped backups before any changes
 - **Reset Support**: Remove claude-custom keys with `-r` or `--reset` option
+- **Statusline**: Optional colorful prompt statusline showing model, tokens, git, context bar, session duration, turn count, unpushed commits
+- **Statusline Themes**: Choose between detailed, compact, or monochrome display modes
+
+<img src="images/screenshot-statusline.png" alt="statusline showing model, tokens, git, context bar, duration, turns, cost" width="800"/>
 
 > **⚠️ Important**: When selecting models, ensure they support **tool use / function calling**. Not all models support this capability — check your provider's documentation for compatible models.
 
@@ -77,9 +81,11 @@ apk add jq
 
 ## 🚀 Installation
 
-### Option 1: Homebrew (macOS/Linux) — Easiest
+> **Note:** The statusline feature requires the `functions/statusline.sh` script. Installation methods that clone the full repo (Homebrew, Clone & Install) include this automatically. For other methods, the `--status` flag will not be available unless you clone the repo.
 
-Install the formula:
+### Option 1: Homebrew (macOS/Linux) — Recommended
+
+Install the formula (includes statusline support):
 
 ```bash
 brew tap obiwancenobi/claude-custom https://github.com/obiwancenobi/claude-custom
@@ -92,67 +98,63 @@ Update and upgrade:
 brew update && brew upgrade claude-custom
 ```
 
-### Option 2: Quick Install (One-Liner)
+### Option 2: Git Clone (Full features)
 
-Download and install directly to `/usr/local/bin`:
+Clone the repo to get all files including statusline support:
 
-**Using curl:**
+```bash
+git clone https://github.com/obiwancenobi/claude-custom.git /usr/local/share/claude-custom
+sudo ln -sf /usr/local/share/claude-custom/claude-custom /usr/local/bin/claude-custom
+```
+
+Update later:
+
+```bash
+cd /usr/local/share/claude-custom && git pull
+```
+
+### Option 3: Local Use (No Install)
+
+Run directly from the repository:
+
+```bash
+git clone https://github.com/obiwancenobi/claude-custom.git
+cd claude-custom
+./claude-custom
+```
+
+### Quick Install (Basic — no statusline)
+
+Downloads only the main script. Statusline `--status` will not be available.
+
+**curl:**
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/obiwancenobi/claude-custom/main/claude-custom | sudo tee /usr/local/bin/claude-custom > /dev/null && sudo chmod +x /usr/local/bin/claude-custom
 ```
 
-**Using wget:**
+**wget:**
 
 ```bash
 wget -qO- https://raw.githubusercontent.com/obiwancenobi/claude-custom/main/claude-custom | sudo tee /usr/local/bin/claude-custom > /dev/null && sudo chmod +x /usr/local/bin/claude-custom
-```
-
-### Option 3: Manual Installation
-
-#### Copy (requires sudo)
-
-```bash
-sudo cp claude-custom /usr/local/bin/
-sudo chmod +x /usr/local/bin/claude-custom
-```
-
-#### Symlink (no need to copy)
-
-```bash
-ln -sf "$(pwd)/claude-custom" /usr/local/bin/claude-custom
-```
-
-#### Clone & Install
-
-```bash
-git clone https://github.com/yourusername/claude-custom.git
-cd claude-custom
-sudo cp claude-custom /usr/local/bin/
-sudo chmod +x /usr/local/bin/claude-custom
-```
-
-### Option 4: Local Use (No Install)
-
-Run directly from the repository without installing:
-
-```bash
-./claude-custom
-# or
-./claude-custom --version
 ```
 
 ### Verify Installation
 
 ```bash
 claude-custom --version
-# Claude Custom v1.3.1
+# Claude Custom v1.4.0
 ```
 
 ### Uninstall
 
 ```bash
-sudo rm /usr/local/bin/claude-custom
+# If installed via Homebrew
+brew uninstall claude-custom
+
+# If installed via clone/symlink
+sudo rm -f /usr/local/bin/claude-custom
+rm -rf /usr/local/share/claude-custom
 ```
 
 ## 🎯 Usage
@@ -166,9 +168,25 @@ claude-custom
 ### Command-Line Options
 
 ```bash
-claude-custom -h, --help     # Display this help message
-claude-custom -v, --version  # Show version information
-claude-custom -r, --reset  # Reset configuration (remove claude-custom keys)
+claude-custom -h, --help             # Display this help message
+claude-custom -v, --version          # Show version information
+claude-custom -s, --status           # Enable statusline in prompt
+claude-custom -S, --status-disable   # Disable statusline in prompt
+claude-custom -t, --theme            # Set statusline theme
+claude-custom -r, --reset            # Reset configuration
+```
+
+### Statusline Commands
+
+```bash
+# Enable statusline
+claude-custom --status
+
+# Disable statusline
+claude-custom --status-disable
+
+# Set statusline theme (detailed/compact/monochrome)
+claude-custom --theme
 ```
 
 ### What Gets Configured
@@ -182,6 +200,79 @@ The tool writes these environment variables to Claude Code's `settings.json`:
 | `ANTHROPIC_DEFAULT_SONNET_MODEL` | Default Sonnet model name |
 | `ANTHROPIC_DEFAULT_OPUS_MODEL` | Default Opus model name |
 | `ANTHROPIC_DEFAULT_HAIKU_MODEL` | Default Haiku model name |
+| `STATUSLINE_THEME` | Statusline display theme (`detailed`/`compact`/`monochrome`) |
+
+## 🎯 Statusline (Optional Feature)
+
+Enable a colorful statusline in your Claude Code prompt that displays:
+
+- 🤖 **Model** — Current model identifier
+- ↑/↓ **Tokens** — Input/output token counts
+- ⎇ **Git** — Branch name + diff status (+N -N)
+- ↑N **Unpushed** — Commits ahead of upstream
+- [████] **Context** — Progress bar with percentage
+- ⏱ **Duration** — Session elapsed time
+- 💬 **Turns** — Number of exchanges
+- ⚡ **Compaction** — Exchanges until compaction
+- $ **Cost** — Session cost in USD
+
+### Enable Statusline
+
+```bash
+claude-custom --status
+# → Select scope (Global/Project)
+# → Confirm
+```
+
+### Disable Statusline
+
+```bash
+claude-custom --status-disable
+# → Select scope (Global/Project)
+# → Confirm
+# → Removes statusline config and script
+```
+
+### Set Statusline Theme
+
+```bash
+claude-custom --theme
+# → Select scope (Global/Project)
+# → Choose theme:
+#    1. detailed   - Full info (default)
+#    2. compact    - Minimal: model, branch, context %
+#    3. monochrome - No colors, plain text
+```
+
+Theme is stored in `settings.json` under `env.STATUSLINE_THEME`.
+
+### Statusline Preview
+
+**Detailed** (default) — Full info with colors, 2-line layout:
+<img src="images/theme-detailed.png" alt="detailed theme" width="800"/>
+
+**Compact** — Minimal, single line:
+<img src="images/theme-compact.png" alt="compact theme" width="800"/>
+
+**Monochrome** — No colors, plain text:
+<img src="images/theme-monochrome.png" alt="monochrome theme" width="800"/>
+
+**Detailed theme (default):**
+```
+🤖 claude-sonnet-4-20250514 │ ↑15234 ↓4521 │ ⎇ myproject@main +3-0 ↑2
+📊 ████████░░ 65% │ ⏱ 12m34s 💬 8 │ 💰 $0.025
+```
+
+**Compact theme:**
+```
+🤖 claude-sonnet-4-20250514 │ ⎇ myproject@main │ 65%
+```
+
+**Monochrome theme:**
+```
+🤖 claude-sonnet-4-20250514 | ↑15234 ↓4521 | ⎇ myproject@main +3-0 ↑2
+📊 ████████░░ 65% | ⏱ 12m34s 💬 8 | 💰 $0.025
+```
 
 ## 🛠️ How It Works
 
@@ -230,6 +321,15 @@ claude-custom -r
 ### Switch providers
 
 Just run `claude-custom` again and select a different provider. The old configuration is preserved as a backup.
+
+### Change statusline theme
+
+```bash
+claude-custom --theme
+# → Select scope: Global or Project
+# → Choose: detailed, compact, or monochrome
+# → Theme saved to settings.json
+```
 
 ## 🔧 Troubleshooting
 

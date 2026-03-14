@@ -1,5 +1,6 @@
-# Shell - but keep scripts in bin/
+# Shell - but keep scripts in bin/ and functions/
 !/bin/
+!/functions/
 *.sh
 *.bash
 *.zsh
