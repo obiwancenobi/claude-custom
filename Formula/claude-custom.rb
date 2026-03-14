@@ -4,10 +4,10 @@
 class ClaudeCustom < Formula
   desc "Configure Claude Code with custom AI model providers (OpenRouter, Ollama, Cerebras, etc.)"
   homepage "https://github.com/obiwancenobi/claude-custom"
-  url "https://github.com/obiwancenobi/claude-custom/archive/refs/tags/v1.4.1.tar.gz"
-  sha256 "e83399b53a0f89b48abb90de6b3d19090e8b99eec55344cf633d9a9acaa38d88"  # Update after tagging: curl -sSL <url> | shasum -a 256
+  url "https://github.com/obiwancenobi/claude-custom/archive/refs/tags/v1.4.2.tar.gz"
+  sha256 ""  # Update after tagging: curl -sSL <url> | shasum -a 256
   license "MIT"
-  version "1.4.1"
+  version "1.4.2"
 
   def install
     bin.install "claude-custom"

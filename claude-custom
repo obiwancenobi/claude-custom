@@ -6,7 +6,7 @@
 # Author: Arif Ariyan
 # Websites: https://beetlix.com | https://riffcompiler.com
 
-SCRIPT_VERSION="1.4.1"
+SCRIPT_VERSION="1.4.2"
 
 # Color codes for output
 RED='\033[0;31m'
@@ -1238,31 +1238,21 @@ handle_statusline() {
     [[ ! -d "$dir" ]] && mkdir -p "$dir"
     
     # Copy statusline script to appropriate location based on scope
-    # Search multiple paths for the statusline script to handle different
-    # installation methods (git clone, Homebrew, manual copy)
+    # Resolve symlinks to find the real script location (needed for Homebrew
+    # which symlinks from /opt/homebrew/bin/ into the Cellar)
+    local real_source="${BASH_SOURCE[0]}"
+    while [[ -L "$real_source" ]]; do
+        real_source="$(readlink "$real_source")"
+        # Resolve relative symlink targets relative to the link's directory
+        [[ "$real_source" != /* ]] && real_source="$(dirname "$(dirname "${BASH_SOURCE[0]}")")/$real_source"
+    done
     local script_dir
-    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    local search_paths=(
-        "$script_dir/functions/statusline.sh"        # sibling to script
-        "$script_dir/../functions/statusline.sh"     # parent dir (formula layout)
-        "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/functions/statusline.sh"
-    )
-    local statusline_script=""
+    script_dir="$(cd "$(dirname "$real_source")" && pwd)"
+    local statusline_script="$script_dir/functions/statusline.sh"
     local command_path=""
 
-    for candidate in "${search_paths[@]}"; do
-        if [[ -f "$candidate" ]]; then
-            statusline_script="$candidate"
-            break
-        fi
-    done
-
-    if [[ -z "$statusline_script" ]]; then
-        print_error "Could not find functions/statusline.sh"
-        echo "  Searched paths:"
-        for candidate in "${search_paths[@]}"; do
-            echo "    $candidate"
-        done
+    if [[ ! -f "$statusline_script" ]]; then
+        print_error "Could not find functions/statusline.sh at: $statusline_script"
         echo ""
         print_warning "If installed via Homebrew, try: brew upgrade claude-custom"
         echo "  If installed via git clone, ensure the functions/ directory exists."
