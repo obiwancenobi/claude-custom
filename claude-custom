@@ -6,7 +6,7 @@
 # Author: Arif Ariyan
 # Websites: https://beetlix.com | https://riffcompiler.com
 
-SCRIPT_VERSION="1.4.0"
+SCRIPT_VERSION="1.4.1"
 
 # Color codes for output
 RED='\033[0;31m'
@@ -1238,25 +1238,50 @@ handle_statusline() {
     [[ ! -d "$dir" ]] && mkdir -p "$dir"
     
     # Copy statusline script to appropriate location based on scope
+    # Search multiple paths for the statusline script to handle different
+    # installation methods (git clone, Homebrew, manual copy)
     local script_dir
     script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    local statusline_script="$script_dir/functions/statusline.sh"
+    local search_paths=(
+        "$script_dir/functions/statusline.sh"        # sibling to script
+        "$script_dir/../functions/statusline.sh"     # parent dir (formula layout)
+        "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/functions/statusline.sh"
+    )
+    local statusline_script=""
     local command_path=""
 
-    if [[ -f "$statusline_script" ]]; then
-        if [[ "$CONFIG_SCOPE" == "global" ]]; then
-            mkdir -p "$HOME/.claude"
-            cp "$statusline_script" "$HOME/.claude/statusline.sh"
-            chmod +x "$HOME/.claude/statusline.sh"
-            command_path="~/.claude/statusline.sh"
-            echo -e "${GREEN}✓${MAGENTA} Copied statusline script to ${GREEN}~/.claude/statusline.sh"
-        else
-            mkdir -p ".claude"
-            cp "$statusline_script" ".claude/statusline.sh"
-            chmod +x ".claude/statusline.sh"
-            command_path=".claude/statusline.sh"
-            echo -e "${GREEN}✓${MAGENTA} Copied statusline script to ${GREEN}.claude/statusline.sh"
+    for candidate in "${search_paths[@]}"; do
+        if [[ -f "$candidate" ]]; then
+            statusline_script="$candidate"
+            break
         fi
+    done
+
+    if [[ -z "$statusline_script" ]]; then
+        print_error "Could not find functions/statusline.sh"
+        echo "  Searched paths:"
+        for candidate in "${search_paths[@]}"; do
+            echo "    $candidate"
+        done
+        echo ""
+        print_warning "If installed via Homebrew, try: brew upgrade claude-custom"
+        echo "  If installed via git clone, ensure the functions/ directory exists."
+        echo ""
+        return 1
+    fi
+
+    if [[ "$CONFIG_SCOPE" == "global" ]]; then
+        mkdir -p "$HOME/.claude"
+        cp "$statusline_script" "$HOME/.claude/statusline.sh"
+        chmod +x "$HOME/.claude/statusline.sh"
+        command_path="~/.claude/statusline.sh"
+        echo -e "${GREEN}✓${MAGENTA} Copied statusline script to ${GREEN}~/.claude/statusline.sh"
+    else
+        mkdir -p ".claude"
+        cp "$statusline_script" ".claude/statusline.sh"
+        chmod +x ".claude/statusline.sh"
+        command_path=".claude/statusline.sh"
+        echo -e "${GREEN}✓${MAGENTA} Copied statusline script to ${GREEN}.claude/statusline.sh"
     fi
 
     # Save statusline config, preserving existing settings
@@ -1469,7 +1494,7 @@ main() {
             ;;
         -s|--status)
             handle_statusline
-            exit 0
+            exit $?
             ;;
         -S|--status-disable)
             handle_statusline_disable
