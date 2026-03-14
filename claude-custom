@@ -6,7 +6,7 @@
 # Author: Arif Ariyan
 # Websites: https://beetlix.com | https://riffcompiler.com
 
-SCRIPT_VERSION="1.4.2"
+SCRIPT_VERSION="1.4.3"
 
 # Color codes for output
 RED='\033[0;31m'
@@ -1242,9 +1242,13 @@ handle_statusline() {
     # which symlinks from /opt/homebrew/bin/ into the Cellar)
     local real_source="${BASH_SOURCE[0]}"
     while [[ -L "$real_source" ]]; do
-        real_source="$(readlink "$real_source")"
-        # Resolve relative symlink targets relative to the link's directory
-        [[ "$real_source" != /* ]] && real_source="$(dirname "$(dirname "${BASH_SOURCE[0]}")")/$real_source"
+        local link_target
+        link_target="$(readlink "$real_source")"
+        if [[ "$link_target" == /* ]]; then
+            real_source="$link_target"
+        else
+            real_source="$(cd "$(dirname "$real_source")" && pwd)/$link_target"
+        fi
     done
     local script_dir
     script_dir="$(cd "$(dirname "$real_source")" && pwd)"
