@@ -7,6 +7,9 @@ flowchart TD
     CheckArgs -->|--help| ShowHelp[Show help & exit]
     CheckArgs -->|--version| ShowVersion[Show version & exit]
     CheckArgs -->|--reset| ResetFlow[Reset flow]
+    CheckArgs -->|--theme| ThemeFlow[Theme flow]
+    CheckArgs -->|--status| StatuslineFlow[Statusline enable flow]
+    CheckArgs -->|--status-disable| StatusDisableFlow[Statusline disable flow]
     CheckArgs -->|None| MainFlow[Main execution flow]
 
     ResetFlow --> CheckJqReset{Check jq dependency}
@@ -27,6 +30,43 @@ flowchart TD
     NoConfig --> End
     AbortReset --> End
     ResetSuccess --> End([Exit])
+
+    ThemeFlow --> ThemeCheckJq{Check jq dependency}
+    ThemeCheckJq -->|Not installed| JqError
+    ThemeCheckJq -->|Installed| ThemePromptScope[Prompt for scope]
+    ThemePromptScope --> ThemePromptChoice{User choice}
+    ThemePromptChoice -->|1 Global| ThemeSetGlobal[Set FILE_CONFIG=~/.claude/settings.json]
+    ThemePromptChoice -->|2 Project| ThemeSetGlobal[Set FILE_CONFIG=./.claude/settings.json]
+    ThemeSetGlobal --> ThemeReadCurrent[Read current theme from settings.json]
+    ThemeReadCurrent --> ThemeShowMenu[Show theme menu: detailed/compact/monochrome]
+    ThemeShowMenu --> ThemeSelect{User selection}
+    ThemeSelect -->|detailed| ThemeSave[Save STATUSLINE_THEME to settings.json env]
+    ThemeSelect -->|compact| ThemeSave
+    ThemeSelect -->|monochrome| ThemeSave
+    ThemeSelect -->|Cancel| AbortTheme[Abort]
+    ThemeSave --> ThemeSuccess[Success message]
+    ThemeSuccess --> End
+    AbortTheme --> End
+
+    StatuslineFlow --> StatusCheckJq{Check jq dependency}
+    StatusCheckJq -->|Not installed| JqError
+    StatusCheckJq -->|Installed| StatusPromptScope[Prompt for scope]
+    StatusPromptScope --> StatusWritable[Validate writable]
+    StatusWritable --> StatusConfirm[Show info & confirm]
+    StatusConfirm --> StatusAbort[Abort]
+    StatusConfirm --> StatusCopyScript[Copy statusline.sh]
+    StatusCopyScript --> StatusSaveJson[Save statusLine + STATUSLINE_THEME to settings.json]
+    StatusSaveJson --> StatusSuccess[Success]
+    StatusSuccess --> End
+
+    StatusDisableFlow --> DisableCheckJq{Check jq dependency}
+    DisableCheckJq -->|Not installed| JqError
+    DisableCheckJq -->|Installed| DisablePromptScope[Prompt for scope]
+    DisablePromptScope --> DisableConfirm[Show info & confirm]
+    DisableConfirm --> DisableAbort[Abort]
+    DisableConfirm --> DisableRemove[Remove statusLine + script]
+    DisableRemove --> DisableSuccess[Success]
+    DisableSuccess --> End
 
     MainFlow --> CheckJq{Check jq dependency}
     CheckJq -->|Not installed| JqError[Error & exit]
@@ -374,6 +414,337 @@ stateDiagram-v2
 ```
 
 ---
+
+### Flow Diagram: Statusline Enable (--status/-s)
+
+```mermaid
+flowchart TD
+    Start([User runs: claude-custom --status]) --> PrintLogo[Print ASCII logo]
+    PrintLogo --> CheckJq[Check jq dependency]
+    CheckJq -->|Not installed| JqError[Error & exit]
+    CheckJq -->|Installed| CheckGum{Check gum availability}
+
+    CheckGum -->|Available| SetGumAvailable[GUM_AVAILABLE=true]
+    CheckGum -->|Not available| CheckUseGum{USE_GUM=true?}
+    CheckUseGum -->|Yes| ShowGumInstall[Show gum install hint]
+    CheckUseGum -->|No| SetGumUnavailable[GUM_AVAILABLE=false]
+    ShowGumInstall --> SetGumUnavailable
+
+    SetGumAvailable --> PromptScope[Prompt for configuration scope]
+    SetGumUnavailable --> PromptScope
+
+    PromptScope --> GetScopeChoice{User choice}
+    GetScopeChoice -->|1 Global| SetGlobal[Set CONFIG_SCOPE=global FILE_CONFIG=~/.claude/settings.json]
+    GetScopeChoice -->|2 Project| SetProject[Set CONFIG_SCOPE=project FILE_CONFIG=./.claude/settings.json]
+    GetScopeChoice -->|Invalid| RetryScope[Re-prompt for scope]
+    RetryScope --> PromptScope
+
+    SetGlobal --> ValidateWritable[Validate file is writable]
+    SetProject --> ValidateWritable
+
+    ValidateWritable -->|Not writable| WriteError[Error & exit]
+    ValidateWritable -->|Writable| ShowInfo[Show statusline info]
+    WriteError --> End
+
+    ShowInfo --> ConfirmStatus{Confirm enable?}
+    ConfirmStatus -->|No| Abort[Configuration cancelled]
+    Abort --> End
+
+    ConfirmStatus -->|Yes| SourceStatusline[Source statusline functions]
+    SourceStatusline --> EnsureDir[Ensure config directory exists]
+    EnsureDir --> CopyScript[Copy statusline.sh to target location]
+
+    CopyScript --> CheckScope{CONFIG_SCOPE?}
+    CheckScope -->|Global| CopyGlobal[Copy to ~/.claude/statusline.sh]
+    CheckScope -->|Project| CopyProject[Copy to .claude/settings.sh]
+
+    CopyGlobal --> BuildJson[Build statusLine JSON config]
+    CopyProject --> BuildJson
+
+    BuildJson --> CheckConfigExists{Config exists?}
+    CheckConfigExists -->|Yes| MergeConfig[Merge with existing config]
+    CheckConfigExists -->|No| CreateConfig[Create new config]
+    MergeJson[Apply jq merge] --> WriteConfig[Write to settings.json]
+    CreateConfig --> WriteConfig
+
+    WriteConfig --> Success[Success message]
+    Success --> RestartMsg[Show restart instruction]
+    RestartMsg --> End([Exit])
+
+    JqError --> End
+
+    style Start fill:#90EE90
+    style End fill:#FFB6C1
+    style Success fill:#ADD8E6
+    style JqError fill:#FFCCCB
+    style WriteError fill:#FFCCCB
+    style Abort fill:#FFD700
+    style ShowInfo fill:#E6E6FA
+    style CopyScript fill:#E6E6FA
+    style WriteConfig fill:#ADD8E6
+```
+
+### Component Architecture: Statusline System
+
+```mermaid
+flowchart TB
+    Main[claude-custom CLI]
+
+    subgraph CLI_Args
+        StatusFlag[--status / -s flag]
+    end
+
+    subgraph Status_Handler
+        HandleStatus[handle_statusline]
+        SourceFunc[source_statusline]
+    end
+
+    subgraph Scope_Management
+        PromptScope[prompt_scope_selection]
+        ValidateWritable[validate_writable]
+    end
+
+    subgraph File_Operations
+        EnsureDir[Ensure .claude directory]
+        CopyScript[Copy statusline.sh]
+        SaveJson[Save settings.json]
+    end
+
+    subgraph Statusline_Script
+        ReadJSON[Read JSON from stdin]
+        ReadTheme[Read STATUSLINE_THEME from env]
+        ParseModel[Parse model info]
+        ParseTokens[Parse token counts]
+        ParseContext[Parse context window]
+        ParseCost[Parse cost info]
+        ParseGit[Parse git branch/status]
+        SessionStart[Track session start time]
+        CountTurns[Increment turn counter]
+        CountUnpushed[Count unpushed commits]
+        BuildBar[Build progress bar]
+        FormatOutput[Format ANSI output]
+    end
+
+    subgraph External_Dependencies
+        Jq[jq CLI tool]
+        Git[git CLI tool]
+        Gum[gum CLI tool optional]
+    end
+
+    subgraph Configuration_Storage
+        GlobalConfig[~/.claude/statusline.sh]
+        ProjectConfig[./.claude/statusline.sh]
+        SettingsJSON[settings.json]
+    end
+
+    subgraph Statusline_Display
+        ModelID[Model ID - Cyan]
+        Tokens[Input/Output tokens - Green/Purple]
+        GitInfo[Git branch + diff - Blue]
+        Unpushed[Unpushed commits - Orange]
+        ContextBar[Context bar - Green/Yellow/Red]
+        Compaction[Compaction warning - Orange]
+        CostDisplay[Cost - Gray]
+        Duration[Session duration - Gray]
+        TurnCount[Turn/exchange count - Gray]
+        ThemeSelect[Theme: detailed/compact/monochrome]
+    end
+
+    Main --> StatusFlag
+    StatusFlag --> HandleStatus
+    HandleStatus --> PromptScope
+    HandleStatus --> SourceFunc
+    PromptScope --> ValidateWritable
+    ValidateWritable --> EnsureDir
+    EnsureDir --> CopyScript
+    CopyScript --> GlobalConfig
+    CopyScript --> ProjectConfig
+    HandleStatus --> SaveJson
+    SaveJson --> SettingsJSON
+
+    GlobalConfig --> ReadJSON
+    ProjectConfig --> ReadJSON
+
+    ReadJSON --> ParseModel
+    ReadJSON --> ParseTokens
+    ReadJSON --> ParseContext
+    ReadJSON --> ParseCost
+    ReadJSON --> ParseGit
+
+    ParseModel --> ModelID
+    ParseTokens --> Tokens
+    ParseGit --> GitInfo
+    ParseContext --> BuildBar
+    BuildBar --> ContextBar
+    ParseCost --> CostDisplay
+    ParseContext --> Compaction
+
+    ModelID --> FormatOutput
+    Tokens --> FormatOutput
+    GitInfo --> FormatOutput
+    ContextBar --> FormatOutput
+    Compaction --> FormatOutput
+    CostDisplay --> FormatOutput
+
+    SaveJson --> Jq
+    ParseModel --> Jq
+    ParseTokens --> Jq
+    ParseContext --> Jq
+    ParseCost --> Jq
+    ParseGit --> Jq
+    ParseGit --> Git
+    HandleStatus --> Gum
+
+    style HandleStatus fill:#E6E6FA
+    style ReadJSON fill:#ADD8E6
+    style FormatOutput fill:#90EE90
+```
+
+### Data Flow: Statusline JSON Processing
+
+```mermaid
+flowchart LR
+    subgraph Input_JSON
+        JSON[Claude Code JSON stdin]
+    end
+
+    subgraph Parsing
+        ParseModel[Parse model.display_name]
+        ParseDir[Parse workspace.current_dir]
+        ParseContext[Parse context_window]
+        ParseTokens[Parse total_input/output_tokens]
+        ParseCost[Parse cost.total_cost_usd]
+        ParseGit[Parse worktree.branch]
+        ParseCompact[Parse exceeds_200k_tokens]
+    end
+
+    subgraph Processing
+        TokenCount[Calculate token counts]
+        UsePercent[Calculate used_percentage]
+        GitStatus[Get git status counts]
+        UnpushedCount[Count unpushed commits via git rev-list]
+        SessionDuration[Calculate session elapsed time]
+        TurnCounter[Increment turn counter]
+        BarGen[Generate progress bar]
+        ColorCalc[Calculate context color]
+    end
+
+    subgraph Output_Formats
+        ModelFmt[Model format - Cyan bold]
+        TokenFmt[Token format - Green input, Purple output]
+        GitFmt[Git format - Blue branch, Green+, Red-]
+        UnpushedFmt[Unpushed format - Orange ↑N]
+        BarFmt[Bar format - Color based on percentage]
+        WarnFmt[Compaction warning - Orange]
+        CostFmt[Cost display - Gray]
+        DurationFmt[Duration format - Gray ⏱ XhYm]
+        TurnsFmt[Turns format - Gray 💬 N]
+    end
+
+    subgraph Statusline_Output
+        Result[Formatted ANSI statusline]
+    end
+
+    JSON --> ParseModel
+    JSON --> ParseDir
+    JSON --> ParseContext
+    JSON --> ParseTokens
+    JSON --> ParseCost
+    JSON --> ParseGit
+    JSON --> ParseCompact
+
+    ParseModel --> ModelFmt
+    ParseTokens --> TokenCount
+    TokenCount --> TokenFmt
+    ParseContext --> UsePercent
+    UsePercent --> BarGen
+    BarGen --> BarFmt
+    UsePercent --> ColorCalc
+    ColorCalc --> BarFmt
+    ParseDir --> GitStatus
+    ParseGit --> GitStatus
+    GitStatus --> GitFmt
+    ParseCompact --> WarnFmt
+    ParseCost --> CostFmt
+    UnpushedCount --> UnpushedFmt
+    SessionDuration --> DurationFmt
+    TurnCounter --> TurnsFmt
+
+    ModelFmt --> Result
+    TokenFmt --> Result
+    GitFmt --> Result
+    UnpushedFmt --> Result
+    BarFmt --> Result
+    WarnFmt --> Result
+    CostFmt --> Result
+    DurationFmt --> Result
+    TurnsFmt --> Result
+
+    style JSON fill:#90EE90
+    style Result fill:#ADD8E6
+    style BarGen fill:#E6E6FA
+```
+
+### State Diagram: Statusline Feature Flow
+
+```mermaid
+stateDiagram-v2
+    [*] --> Idle
+
+    Idle --> CheckArgs: User runs script
+    CheckArgs --> StatusFlag: -s/--status
+    CheckArgs --> ThemeFlag: -t/--theme
+
+    StatusFlag --> PrintLogo: Valid flag
+    PrintLogo --> CheckJq: Display logo
+    CheckJq --> CheckGum: jq installed
+    CheckGum --> ShowGumHint: gum missing + USE_GUM
+    CheckGum --> PromptScope: gum available or not needed
+    ShowGumHint --> PromptScope: Continue
+
+    PromptScope --> GlobalScope: Choose 1
+    PromptScope --> ProjectScope: Choose 2
+
+    GlobalScope --> ValidateWritable: FILE_CONFIG set
+    ProjectScope --> ValidateWritable: FILE_CONFIG set
+
+    ValidateWritable --> ShowInfo: Writable
+    ValidateWritable --> [*]: Not writable (exit)
+
+    ShowInfo --> ConfirmPrompt: Display info
+    ConfirmPrompt --> Abort: No
+    ConfirmPrompt --> CopyScript: Yes
+
+    Abort --> [*]: Cancelled
+
+    CopyScript --> GlobalCopy: scope=global
+    CopyScript --> ProjectCopy: scope=project
+
+    GlobalCopy --> BuildJson: script copied
+    ProjectCopy --> BuildJson: script copied
+
+    BuildJson --> MergeConfig: Config exists
+    BuildJson --> CreateNew: Config missing
+
+    MergeConfig --> WriteSettings: JSON built
+    CreateNew --> WriteSettings: JSON built
+
+    WriteSettings --> Success: Written
+    Success --> Complete: Success message
+
+    Complete --> [*]: Exit
+
+    ThemeFlag --> ThemePromptScope: Valid flag
+    ThemePromptScope --> ThemeGlobal: Choose 1
+    ThemePromptScope --> ThemeProject: Choose 2
+    ThemeGlobal --> ThemeReadCurrent: scope set
+    ThemeProject --> ThemeReadCurrent: scope set
+    ThemeReadCurrent --> ThemeMenu: Display current
+    ThemeMenu --> ThemeSelect: User selects
+    ThemeSelect --> ThemeSave: Write to settings.json
+    ThemeSave --> ThemeSuccess: Success message
+    ThemeSuccess --> [*]: Exit
+```
 
 **Legend:**
 - **Rounded rectangles**: Processes/functions
